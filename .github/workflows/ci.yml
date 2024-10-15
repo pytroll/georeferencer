@@ -1,0 +1,38 @@
+name: Run unit tests
+
+on:
+  # Run tests on push or pull requests to the "main" branch
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  
+  # Allow the workflow to be triggered manually
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository to the runner
+    - name: Check out the code
+      uses: actions/checkout@v4
+
+    # Set up Python environment
+    - name: Set up Python 3.x
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    # Install dependencies (update this based on your project's requirements)
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt  # Assumes your project has a requirements.txt
+
+    # Run pytest on the tests directory
+    - name: Run tests with pytest
+      run: |
+        pip install pytest  # Install pytest if not in requirements
+        pytest ./tests
