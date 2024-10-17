@@ -35,4 +35,4 @@ jobs:
     - name: Run tests with pytest
       run: |
         pip install pytest  # Install pytest if not in requirements
-        pytest ./tests
+        pytest ./tests -vv
