@@ -42,6 +42,11 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install -r requirements.txt
 
+    - name: Set CMake to find pybind11
+      run: |
+        export CMAKE_PREFIX_PATH=$(python -c "import site; print(site.getsitepackages()[0])")/pybind11/share/cmake/pybind11:$CMAKE_PREFIX_PATH
+
+
     # Cache and install Eigen
     - name: Cache Eigen
       uses: actions/cache@v3
