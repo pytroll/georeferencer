@@ -62,7 +62,8 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake -DPYBIND11_DIR=$(python -c "import site; print(site.getsitepackages()[0])")/pybind11/share/cmake/pybind11 ..
+        export pybind11_DIR=$(python -c "import site; print(site.getsitepackages()[0])")/pybind11/share/cmake/pybind11
+        cmake ..
         make
     # Step 4: Build the C++ extension
     #- name: Build C++ extension
