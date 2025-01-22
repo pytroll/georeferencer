@@ -42,10 +42,11 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install -r requirements.txt
 
-    - name: Set CMake to find pybind11
+    - name: Set up pybind11 path
       run: |
-        export CMAKE_PREFIX_PATH=$(python -c "import site; print(site.getsitepackages()[0])")/pybind11/share/cmake/pybind11:$CMAKE_PREFIX_PATH
-
+        PYBIND11_DIR=$(python -c "import site; print(site.getsitepackages()[0])")/pybind11/share/cmake/pybind11
+        echo "pybind11 found at $PYBIND11_DIR"
+        echo "PYBIND11_DIR=$PYBIND11_DIR" >> $GITHUB_ENV
 
     # Cache and install Eigen
     - name: Cache Eigen
@@ -68,7 +69,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake ..
+        cmake -DPYBIND11_DIR=$PYBIND11_DIR ..
 
     # Build the C++ extension using CMake
     - name: Build the C++ extension
