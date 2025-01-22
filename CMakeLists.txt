@@ -1,17 +1,3 @@
-cmake_minimum_required(VERSION 3.15)
-project(displacement_calc LANGUAGES CXX)
-
-# Use pybind11 for building Python bindings
-set(PYBIND11_FINDPYTHON ON)
-find_package(pybind11 REQUIRED)
-
-# Add the C++ source file
-pybind11_add_module(displacement_calc displacement_calc.cpp)
-install(TARGETS displacement_calc DESTINATION .)
-
-
-cmake_minimum_required(VERSION 3.10)
-
 # Project name
 project(displacement_calc)
 
