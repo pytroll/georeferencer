@@ -70,6 +70,7 @@ jobs:
         cd build
         cmake -DPYBIND11_DIR=$PYBIND11_DIR ..
         make
+        ls -la ../src/python/georeferencer
     # Step 4: Build the C++ extension
     #- name: Build C++ extension
     #  run: |
