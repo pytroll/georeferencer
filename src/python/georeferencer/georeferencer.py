@@ -8,7 +8,7 @@ from scipy.spatial import cKDTree
 from rasterio.windows import from_bounds
 from rasterio.transform import xy
 
-import discalc
+import displacement_calc
 
 def open_subset_tif(filepath, min_lat, max_lat, min_lon, max_lon):
     """Open a subset of a GeoTIFF file based on latitude and longitude bounds."""
@@ -145,5 +145,3 @@ def reproject_reference_into_swath(matrix, crs, swath_longitudes, swath_latitude
                                                                                            lats=swath_latitudes))
         resampled_data=res.resample(sub_matrix)
         return resampled_data
-
-print("hello")
