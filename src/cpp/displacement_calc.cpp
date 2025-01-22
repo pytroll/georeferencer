@@ -164,7 +164,7 @@ std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pai
     return {0, 0};
 }
 
-PYBIND11_MODULE(discalc, m) {
+PYBIND11_MODULE(displacement_calc, m) {
     m.doc() = "Optimized image processing functions using Eigen";
     m.def("calculate_covariance_matrix", &calculate_covariance_matrix, "Calculate covariance matrix");
     m.def("laplacian_operator", &laplacian_operator, "Apply Laplacian operator");

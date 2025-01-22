@@ -1,14 +1,12 @@
 import rioxarray
 import dask.array as da
 import numpy as np
-import gcp_generation as gcp_gen
+import georeferencer.gcp_generation as gcp_gen
 from pyresample.geometry import AreaDefinition, SwathDefinition
 from pyresample import gradient
 from scipy.spatial import cKDTree
 from rasterio.windows import from_bounds
 from rasterio.transform import xy
-
-import displacement_calc
 
 def open_subset_tif(filepath, min_lat, max_lat, min_lon, max_lon):
     """Open a subset of a GeoTIFF file based on latitude and longitude bounds."""
