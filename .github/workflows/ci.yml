@@ -59,10 +59,10 @@ jobs:
         fi
 
     - name: Set pybind11 path
-        run: |
-          PYBIND11_DIR=$(python -c "import site; import pybind11; print(pybind11.get_cmake_dir())")
-          echo "pybind11 found at $PYBIND11_DIR"
-          echo "PYBIND11_DIR=$PYBIND11_DIR" >> $GITHUB_ENV  # Export to the environment
+      run: |
+        PYBIND11_DIR=$(python -c "import site; import pybind11; print(pybind11.get_cmake_dir())")
+        echo "pybind11 found at $PYBIND11_DIR"
+        echo "PYBIND11_DIR=$PYBIND11_DIR" >> $GITHUB_ENV  # Export to the environment
 
     - name: Build the C++ extension
       run: |
