@@ -3,7 +3,6 @@
 import numpy as np
 from scipy import ndimage
 
-#Image downsampling
 def downsample_2x2(matrix):
     """
     Parameters:
@@ -22,7 +21,6 @@ def downsample_2x2(matrix):
 
     return downsampled_matrix
 
-#File handling
 def get_variance_array_from_file(path='gcp_library.npz'):
     """
     Load the variance array from a specified NPZ file.

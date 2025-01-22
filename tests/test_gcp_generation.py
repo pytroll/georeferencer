@@ -1,4 +1,3 @@
-#import georeferencer.gcp_generation as gcp_gen
 import georeferencer.gcp_generation as gcp_gen
 import numpy as np
 import pytest

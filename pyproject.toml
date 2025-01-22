@@ -18,8 +18,13 @@ classifiers = [
 Homepage = "https://github.com/pytroll/georeferencer"
 
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling", "hatch-vcs", "pybind11"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+pythonpath = [
+  ".", "src/python",
+]
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/georeferencer"]
+packages = ["src/python"]
