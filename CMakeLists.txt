@@ -6,8 +6,13 @@ project(displacement_calc)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Find pybind11 (you may need to update this if it's not installed system-wide)
-find_package(pybind11 REQUIRED)
+# Check if pybind11_DIR is set, and use it if found
+if(NOT DEFINED pybind11_DIR)
+    message(FATAL_ERROR "pybind11_DIR is not defined. Set the path to pybind11Config.cmake.")
+endif()
+
+# Find pybind11 using the pybind11_DIR path
+find_package(pybind11 REQUIRED PATHS ${pybind11_DIR} NO_DEFAULT_PATH)
 
 # Eigen (assuming you have the source already downloaded)
 set(EIGEN3_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/eigen)

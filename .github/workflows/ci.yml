@@ -64,17 +64,11 @@ jobs:
           curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz | tar xz --strip-components=1 -C eigen
         fi
 
-    # Configure the C++ project using CMake
-    - name: Configure the C++ project
+    - name: Build the C++ extension
       run: |
         mkdir -p build
         cd build
         cmake -DPYBIND11_DIR=$PYBIND11_DIR ..
-
-    # Build the C++ extension using CMake
-    - name: Build the C++ extension
-      run: |
-        cd build
         make
     # Step 4: Build the C++ extension
     #- name: Build C++ extension
