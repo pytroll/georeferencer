@@ -1,30 +1,3 @@
-[project]
-name = "georeferencer"
-version = "0.0.1"
-authors = [
-  { name="Jacob Nilsson", email="jacob.nilsson@smhi.se" },
-]
-description = "Python package for georeferencing satellite imagery."
-readme = "README.md"
-requires-python = ">=3.12"
-classifiers = [
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python",
-]
-
-[project.urls]
-Homepage = "https://github.com/pytroll/georeferencer"
-
 [build-system]
-requires = ["hatchling", "hatch-vcs", "pybind11"]
-build-backend = "hatchling.build"
-
-[tool.pytest.ini_options]
-pythonpath = [
-  ".", "src/python",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/python"]
+requires = ["pybind11", "setuptools"]
+build-backend = "setuptools.build_meta"
