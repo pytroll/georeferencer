@@ -21,8 +21,7 @@ MatrixXf calculate_covariance_matrix(const Eigen::Ref<const Eigen::MatrixXf>& P,
     int D = 2 * max_displacement + 1;
     float normalization_factor = 1.0f / (N_rows * N_cols); 
 
-    float P_sum = P.sum();
-    float P_mean = P_sum * normalization_factor;
+    float P_mean = P.sum() * normalization_factor;
 
     std::vector<std::pair<int, int>> displacements;
     for (int dy = -max_displacement; dy <= max_displacement; ++dy) {
@@ -53,7 +52,11 @@ MatrixXf calculate_covariance_matrix(const Eigen::Ref<const Eigen::MatrixXf>& P,
         float term1 = product_sum * normalization_factor;
         float term2 = P_mean * (shifted_sum * normalization_factor);
 
-        covariance_matrix(idx / D, idx % D) = term1 - term2;
+        
+        int row_idx = dy + max_displacement;
+        int col_idx = dx + max_displacement;
+
+        covariance_matrix(row_idx, col_idx) = term1 - term2;
     }
 
     float min_cov = covariance_matrix.minCoeff();
@@ -115,7 +118,7 @@ std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pai
                 continue;
             }
 
-            MatrixXf res = calculate_covariance_matrix(ref_image_block, image_block, max_displacement);
+            MatrixXf res = calculate_covariance_matrix(image_block, ref_image_block, max_displacement);
 
             MatrixXf::Index maxRow, maxCol;
             res.maxCoeff(&maxRow, &maxCol);
@@ -158,10 +161,11 @@ std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pai
                                         });
 
     if (most_common != displacement_counts.end()) {
-        return most_common->first;
+        if(most_common->second > 1)
+            return most_common->first;
     }
 
-    return {0, 0};
+    return {-100, -100};
 }
 
 PYBIND11_MODULE(displacement_calc, m) {

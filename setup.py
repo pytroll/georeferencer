@@ -32,6 +32,7 @@ class CMakeBuildExt(build_ext_orig):
         subprocess.check_call(
             [
                 "cmake",
+                "-DCMAKE_BUILD_TYPE=Release",
                 "-S", ".",
                 "-B", build_temp,
                 f"-DPYBIND11_DIR={pybind11_dir}",
