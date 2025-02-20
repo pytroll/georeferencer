@@ -58,27 +58,8 @@ jobs:
           curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz | tar xz --strip-components=1 -C eigen
         fi
 
-    - name: Set pybind11 path
-      run: |
-        PYBIND11_DIR=$(python -c "import site; import pybind11; print(pybind11.get_cmake_dir())")
-        echo "pybind11 found at $PYBIND11_DIR"
-        echo "PYBIND11_DIR=$PYBIND11_DIR" >> $GITHUB_ENV  # Export to the environment
-
-    - name: Build the C++ extension
-      run: |
-        mkdir -p build
-        cd build
-        cmake -DPYBIND11_DIR=$PYBIND11_DIR ..
-        make
-    # Step 4: Build the C++ extension
-    #- name: Build C++ extension
-    #  run: |
-    #    set -e  # Fail fast on errors
-    #    c++ -O3 -Wall -shared -std=c++17 -fPIC -fopenmp -march=native \
-    #    -I ./eigen `python3 -m pybind11 --includes` src/cpp/displacement_calc.cpp \
-    #    -o src/python/georeferencer/libdiscalc`python3-config --extension-suffix`
-
     # Run pytest on the tests directory
     - name: Run tests with pytest
       run: |
+        python3 -m pip install .
         python3 -m pytest ./tests
