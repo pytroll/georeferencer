@@ -62,4 +62,5 @@ jobs:
     - name: Run tests with pytest
       run: |
         python3 -m pip install .[test]
+        echo "PYTHONPATH=$(pwd)/src/python" >> $GITHUB_ENV
         python3 -m pytest ./tests
