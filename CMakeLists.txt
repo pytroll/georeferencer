@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Enable optimizations
-set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "-O3 -Wall -shared -std=c++17 -fPIC -fopenmp -march=native -flto -ftree-vectorize -fopt-info-vec")
+set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "-O3 -Wall -shared -std=c++17 -fPIC -fopenmp -march=native -flto -ftree-vectorize")
 
 if(NOT DEFINED PYBIND11_DIR)
     message(FATAL_ERROR "PYBIND11_DIR is not defined. Set the path to pybind11Config.cmake.")

@@ -1,2 +1,1 @@
-import georeferencer.georeferencer as geo_ref
-import pytest
+"""Tests for georeferencer."""
