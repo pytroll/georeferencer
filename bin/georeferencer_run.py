@@ -18,6 +18,7 @@ parser.add_argument(
     help="Path to a .tif file that acts as a reference image,\
                      including name of the file",
 )
+
 args = parser.parse_args()
 
 logging.info("Finding displacement between %s and the reference image %s", args.filename, args.reference)

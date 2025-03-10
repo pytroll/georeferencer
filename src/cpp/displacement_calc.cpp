@@ -99,13 +99,13 @@ Eigen::MatrixXf laplacian_operator(const Eigen::Ref<const Eigen::MatrixXf> &imag
     return laplacian;
 }
 
-std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
-                                                      const MatrixXf &image,
-                                                      const MatrixXf &reference_image,
-                                                      int N = 48,
-                                                      int max_displacement = 24)
+std::pair<float, float> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
+                                                          const MatrixXf &image,
+                                                          const MatrixXf &reference_image,
+                                                          int N = 48,
+                                                          int max_displacement = 24)
 {
-    std::vector<std::pair<int, int>> displacements;
+    std::vector<std::pair<float, float>> displacements;
     int half_N = N / 2;
 
     MatrixXf lap_image = laplacian_operator(image, 1);
@@ -113,7 +113,7 @@ std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pai
 
 #pragma omp parallel
     {
-        std::vector<std::pair<int, int>> local_displacements;
+        std::vector<std::pair<float, float>> local_displacements;
 
 #pragma omp for nowait
         for (size_t i = 0; i < swath_coords.size(); ++i)
@@ -168,10 +168,10 @@ std::pair<int, int> calculate_covariance_displacement(const std::vector<std::pai
         displacements.insert(displacements.end(), local_displacements.begin(), local_displacements.end());
     }
 
-    std::map<std::pair<int, int>, int> displacement_counts;
+    std::map<std::pair<float, float>, int> displacement_counts;
     for (const auto &d : displacements)
     {
-        if (d.first != -max_displacement && d.second != -max_displacement)
+        if (d.first > -max_displacement && d.second > -max_displacement)
         {
             displacement_counts[d]++;
         }
