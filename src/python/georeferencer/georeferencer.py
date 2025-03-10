@@ -7,12 +7,13 @@ displacement between a swath image and a reference image.
 
 import dask.array as da
 import numpy as np
-import pygac
 import rioxarray
+import xarray as xr
 from pyresample import gradient
 from pyresample.geometry import AreaDefinition, SwathDefinition
 from rasterio.transform import xy
 from rasterio.windows import from_bounds
+from scipy.ndimage import affine_transform
 from scipy.spatial import cKDTree
 
 import georeferencer.displacement_calc as dc
@@ -315,9 +316,31 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
     Returns:
         tuple: Displacement values (dx, dy) between the swath and reference image.
     """
-    reader_cls = pygac.get_reader_class(swath_file)
+    from pygac import get_reader_class
+
+    reader_cls = get_reader_class(swath_file)
     reader = reader_cls(tle_dir=tle_dir, tle_name=tle_file)
     reader.read(swath_file)
     calibrated_ds = reader.get_calibrated_dataset()
 
     return get_swath_displacement(calibrated_ds, reference_image_path)
+
+
+def offset_calibrated_channels(calibrated_ds, reference_image_path):
+    """Calculates and applies the offset for channel data from PyGAC calibrated dataset."""
+    dx, dy = get_swath_displacement(calibrated_ds, reference_image_path)
+    for channel in calibrated_ds.channel_name.values:
+        original_da = calibrated_ds.sel(channel_name=channel).channels
+
+        shifted_data = affine_transform(
+            original_da.data,
+            matrix=[[1, 0], [0, 1]],
+            offset=(-dx, -dy),
+            order=0,
+            mode="nearest",
+        )
+        calibrated_ds["channels"].loc[dict(channel_name=channel)] = xr.DataArray(
+            shifted_data, dims=original_da.dims, attrs={**original_da.attrs, "geo_translation": {"x": dx, "y": dy}}
+        )
+    calibrated_ds.attrs["geo_translation"] = {"x": dx, "y": dy}
+    return calibrated_ds
