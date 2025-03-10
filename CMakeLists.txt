@@ -18,7 +18,6 @@ find_package(pybind11 REQUIRED PATHS ${PYBIND11_DIR} NO_DEFAULT_PATH)
 
 set(EIGEN3_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/eigen)
 
-# Add your source files
 add_library(displacement_calc MODULE src/cpp/displacement_calc.cpp)
 find_package(OpenMP REQUIRED)
 target_link_libraries(displacement_calc PRIVATE OpenMP::OpenMP_CXX)
@@ -27,7 +26,6 @@ target_link_libraries(displacement_calc PRIVATE OpenMP::OpenMP_CXX)
 target_link_libraries(displacement_calc PRIVATE pybind11::module)
 target_include_directories(displacement_calc PRIVATE ${EIGEN3_INCLUDE_DIR})
 
-# Set the output directory for the shared library
 set_target_properties(displacement_calc PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/src/python/georeferencer
     PREFIX ""
