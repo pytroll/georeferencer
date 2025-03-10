@@ -1,13 +1,11 @@
 name: Run unit tests
 
 on:
-  # Run tests on push or pull requests to the "main" branch
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   
-  # Allow the workflow to be triggered manually
   workflow_dispatch:
 
 jobs:
@@ -34,7 +32,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-python-
 
-    # Install dependencies (update this based on your project's requirements)
     - name: Install dependencies
       run: |
         sudo apt-get update
