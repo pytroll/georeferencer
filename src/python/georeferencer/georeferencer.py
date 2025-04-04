@@ -74,8 +74,8 @@ def gcp_to_lonlat(gcp_x, gcp_y, geo_transform):
     Returns:
         tuple: (longitude, latitude) of the GCP in geographic coordinates.
     """
-    gcp_x_original = (gcp_x + 2.5) * 16
-    gcp_y_original = (gcp_y + 2.5) * 16
+    gcp_x_original = (gcp_x) * 16
+    gcp_y_original = (gcp_y) * 16
 
     xp, yp = xy(geo_transform, gcp_y_original, gcp_x_original)
 
@@ -328,14 +328,14 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
 
 def offset_calibrated_channels(calibrated_ds, reference_image_path):
     """Calculates and applies the offset for channel data from PyGAC calibrated dataset."""
-    dx, dy = get_swath_displacement(calibrated_ds, reference_image_path)
+    dy, dx = get_swath_displacement(calibrated_ds, reference_image_path)
     for channel in calibrated_ds.channel_name.values:
         original_da = calibrated_ds.sel(channel_name=channel).channels
 
         shifted_data = affine_transform(
             original_da.data,
             matrix=[[1, 0], [0, 1]],
-            offset=(-dx, -dy),
+            offset=(-dy, -dx),
             order=0,
             mode="nearest",
         )
