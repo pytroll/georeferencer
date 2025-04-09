@@ -1,10 +1,10 @@
 [build-system]
-requires = ["pybind11", "setuptools", "cmake"]
+requires = ["pybind11", "setuptools", "setuptools-scm", "cmake"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "georeferencer"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Python package for georeferencing satellite imagery."
 readme = "README.md"
 authors = [
@@ -37,6 +37,8 @@ intel = [
 
 [tool.setuptools]
 package-dir = {"" = "src/python"}
+
+[tool.setuptools_scm]
 
 [tool.isort]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
