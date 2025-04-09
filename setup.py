@@ -3,7 +3,7 @@
 import os
 import subprocess
 
-from setuptools import Extension, find_packages, setup
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as build_ext_orig
 
 
@@ -78,23 +78,6 @@ class CMakeBuildExt(build_ext_orig):
 
 
 setup(
-    name="georeferencer",
-    version="0.0.1",
-    author="Jacob Nilsson",
-    author_email="jacob.nilsson@smhi.se",
-    description="Python package for georeferencing satellite imagery.",
-    long_description=open("README.md").read(),
-    long_description_content_type="text/markdown",
-    python_requires=">=3.12",
-    install_requires=open("requirements.txt").read().splitlines(),
-    packages=find_packages(where="src/python"),
-    package_dir={"": "src/python"},
-    classifiers=[
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python",
-    ],
     ext_modules=[CMakeExtension("georeferencer.displacement_calc")],
     cmdclass={
         "build_ext": CMakeBuildExt,

@@ -65,3 +65,8 @@ convention = "google"
 [tool.ruff.lint.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
 max-complexity = 10
+
+[dependency-groups]
+dev = [
+    "intel-openmp>=2025.1.0",
+]
