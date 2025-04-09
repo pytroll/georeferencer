@@ -30,37 +30,12 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    # Cache Python dependencies
-    # - name: Cache Python dependencies
-    #   uses: actions/cache@v3
-    #   with:
-    #     path: ~/.cache/pip
-    #     key: ${{ runner.os }}-python-${{ hashFiles('requirements.txt') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-python-
-
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y g++ libomp-dev
         python -m pip install --upgrade pip
         python -m pip install pytest
-
-    # Cache and install Eigen
-    # - name: Cache Eigen
-    #   uses: actions/cache@v3
-    #   with:
-    #     path: eigen/
-    #     key: eigen-cache-v1
-    #     restore-keys: |
-    #       eigen-cache-
-    #
-    # - name: Install Eigen
-    #   run: |
-    #     if [ ! -d "eigen" ]; then
-    #       mkdir -p eigen
-    #       curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz | tar xz --strip-components=1 -C eigen
-    #     fi
 
     # Run pytest on the tests directory
     - name: Run tests with pytest
