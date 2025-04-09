@@ -1,0 +1,9 @@
+dask==2024.11.2
+numpy==2.2.2
+pyresample==1.31.0
+pytest==8.3.2
+rasterio==1.4.2
+rioxarray==0.17.0
+scipy==1.15.1
+setuptools==75.8.0
+pygac

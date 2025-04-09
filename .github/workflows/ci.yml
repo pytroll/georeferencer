@@ -1,0 +1,63 @@
+name: Run unit tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout the repository to the runner
+    - name: Check out the code
+      uses: actions/checkout@v4
+
+    # Set up Python environment
+    - name: Set up Python 3.x
+      uses: actions/setup-python@v4
+      with:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    # Cache Python dependencies
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-python-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++ cmake libomp-dev
+        python3 -m pip install --upgrade pip
+        python3 -m pip install -r requirements.txt
+
+    # Cache and install Eigen
+    - name: Cache Eigen
+      uses: actions/cache@v3
+      with:
+        path: eigen/
+        key: eigen-cache-v1
+        restore-keys: |
+          eigen-cache-
+
+    - name: Install Eigen
+      run: |
+        if [ ! -d "eigen" ]; then
+          mkdir -p eigen
+          curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz | tar xz --strip-components=1 -C eigen
+        fi
+
+    # Run pytest on the tests directory
+    - name: Run tests with pytest
+      run: |
+        python3 -m pip install -e .
+        echo "PYTHONPATH=$(pwd)/src/python" >> $GITHUB_ENV
+        python3 -m pytest ./tests
