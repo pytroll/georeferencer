@@ -36,6 +36,8 @@ intel = [
 ]
 
 [tool.setuptools]
+include-package-data = true
+package-data = {"georeferencer" = ["*"]}
 package-dir = {"" = "src/python"}
 
 [tool.setuptools_scm]

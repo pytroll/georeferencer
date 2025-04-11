@@ -61,8 +61,8 @@ class CMakeBuildExt(build_ext_orig):
             ["python", "-c", "import pybind11; print(pybind11.get_cmake_dir())"],
             text=True,
         ).strip()
-
-        subprocess.check_call(
+        self.announce("Configuring cmake project", level=3)
+        self.spawn(
             [
                 "cmake",
                 "-DCMAKE_BUILD_TYPE=Release",
@@ -74,7 +74,8 @@ class CMakeBuildExt(build_ext_orig):
             ]
         )
 
-        subprocess.check_call(["cmake", "--build", build_temp])
+        self.announce("Building binaries", level=3)
+        self.spawn(["cmake", "--build", build_temp])
 
 
 setup(
