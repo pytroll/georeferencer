@@ -310,14 +310,10 @@ std::vector<std::tuple<float, float>> calculate_covariance_displacement(const st
                 y0 -= max_displacement;
                 x0 = std::round(x0 * 10.0f) / 10.0f;
                 y0 = std::round(y0 * 10.0f) / 10.0f;
-                displacements[i] = {y0, x0};
+                if (std::abs(y0) < max_displacement && std::abs(x0) < max_displacement)
+                    displacements[i] = {y0, x0};
             }
         }
-    }
-    for (auto &d : displacements)
-    {
-        if (std::abs(std::get<0>(d)) >= max_displacement || std::abs(std::get<1>(d)) >= max_displacement)
-            d = {-100.0f, -100.0f};
     }
     return displacements;
 }
