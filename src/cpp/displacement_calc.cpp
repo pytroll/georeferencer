@@ -247,43 +247,13 @@ Eigen::MatrixXf laplacian_operator(const Eigen::Ref<const Eigen::MatrixXf> &imag
     return laplacian;
 }
 
-std::pair<float, float> calculate_medians(const std::vector<std::pair<float, float>> &points)
+std::vector<std::tuple<float, float>> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
+                                                                        const Eigen::MatrixXf &image,
+                                                                        const Eigen::MatrixXf &reference_image,
+                                                                        int N = 48,
+                                                                        int max_displacement = 24)
 {
-    if (points.empty())
-    {
-        return {-100, -100};
-    }
-
-    std::vector<float> y_values, x_values;
-    for (const auto &p : points)
-    {
-        y_values.push_back(p.first);
-        x_values.push_back(p.second);
-    }
-
-    sort(y_values.begin(), y_values.end());
-    sort(x_values.begin(), x_values.end());
-
-    auto median = [](std::vector<float> &sorted_vec)
-    {
-        size_t n = sorted_vec.size();
-        if (n % 2 == 0)
-        {
-            return (sorted_vec[n / 2 - 1] + sorted_vec[n / 2]) / 2.0f;
-        }
-        return sorted_vec[n / 2];
-    };
-
-    return {median(y_values), median(x_values)};
-}
-
-std::pair<float, float> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
-                                                          const Eigen::MatrixXf &image,
-                                                          const Eigen::MatrixXf &reference_image,
-                                                          int N = 48,
-                                                          int max_displacement = 24)
-{
-    std::vector<std::pair<float, float>> displacements;
+    std::vector<std::tuple<float, float>> displacements(swath_coords.size());
     int half_N = N / 2;
     const int s{1};
     Eigen::MatrixXf lap_image = laplacian_operator(image, s);
@@ -291,14 +261,12 @@ std::pair<float, float> calculate_covariance_displacement(const std::vector<std:
 
 #pragma omp parallel
     {
-        std::vector<std::pair<float, float>> local_displacements;
-
 #pragma omp for nowait
         for (size_t i = 0; i < swath_coords.size(); ++i)
         {
             const auto &coord = swath_coords[i];
             int y = coord.first, x = coord.second;
-
+            displacements[i] = {-100, -100};
             if (y - half_N < s || y + half_N > lap_image.rows() - s ||
                 x - half_N < s || x + half_N > lap_image.cols() - s)
             {
@@ -342,24 +310,16 @@ std::pair<float, float> calculate_covariance_displacement(const std::vector<std:
                 y0 -= max_displacement;
                 x0 = std::round(x0 * 10.0f) / 10.0f;
                 y0 = std::round(y0 * 10.0f) / 10.0f;
-                local_displacements.emplace_back(y0, x0);
+                displacements[i] = {y0, x0};
             }
         }
-
-#pragma omp critical
-        displacements.insert(displacements.end(), local_displacements.begin(), local_displacements.end());
     }
-
-    std::vector<std::pair<float, float>> valid_displacements;
-    for (const auto &d : displacements)
+    for (auto &d : displacements)
     {
-        if (d.first > -max_displacement && d.second > -max_displacement)
-        {
-            valid_displacements.push_back(d);
-        }
+        if (std::abs(std::get<0>(d)) >= max_displacement || std::abs(std::get<1>(d)) >= max_displacement)
+            d = {-100.0f, -100.0f};
     }
-
-    return calculate_medians(valid_displacements);
+    return displacements;
 }
 
 PYBIND11_MODULE(displacement_calc, m)
