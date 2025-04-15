@@ -5,20 +5,22 @@ georeferencing using ground control points (GCPs), and calculating
 displacement between a swath image and a reference image.
 """
 
+import logging
+
 import dask.array as da
 import numpy as np
 import rioxarray
-import xarray as xr
+from pyorbital.geoloc_avhrr import estimate_time_and_attitude_deviations
 from pyresample import gradient
 from pyresample.geometry import AreaDefinition, SwathDefinition
 from rasterio.transform import xy
 from rasterio.windows import from_bounds
-from scipy.ndimage import affine_transform
 from scipy.spatial import cKDTree
 
 import georeferencer.displacement_calc as dc
 import georeferencer.gcp_generation as gcp_gen
 
+logger = logging.getLogger(__name__)
 INVALID_DISPLACEMENT = (-100, -100)
 
 
@@ -91,7 +93,7 @@ def translate_gcp_to_swath_coordinates(gcp_array, swath_ds=None, geo_transform=N
         geo_transform (Affine, optional): Geotransform matrix for coordinate conversion.
 
     Returns:
-        list: List of valid GCPs that fall within the swath image bounds.
+        (gcp coords, gcp lonlats): valid GCPs that fall within the swath image bounds, image coords and lonlats.
     """
     longitudes = swath_ds.attrs["area"].lons.values
     latitudes = swath_ds.attrs["area"].lats.values
@@ -111,6 +113,7 @@ def translate_gcp_to_swath_coordinates(gcp_array, swath_ds=None, geo_transform=N
 
     nr_of_valid_gcps = 0
     swath_cords = []
+    gcp_lonlats = []
     N = 24
     for gcp in gcp_array:
         gcp_lon, gcp_lat = gcp_to_lonlat(gcp[1], gcp[0], geo_transform.rio.transform())
@@ -124,8 +127,9 @@ def translate_gcp_to_swath_coordinates(gcp_array, swath_ds=None, geo_transform=N
         if N // 2 <= x < image_shape[0] - N // 2 and N // 2 <= y < image_shape[1] - N // 2:
             swath_cords.append(swath_index)
             nr_of_valid_gcps += 1
+            gcp_lonlats.append((gcp_lon, gcp_lat))
 
-    return swath_cords
+    return swath_cords, gcp_lonlats
 
 
 def reproject_reference_into_swath(
@@ -228,7 +232,7 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
         reference_image_path (str): Path to the reference GeoTIFF image.
 
     Returns:
-        tuple: Displacement values (dx, dy) between the swath and reference image.
+        tuple: Displacement values (time difference, roll, pitch, yaw) between the swath and reference image.
 
     Raises:
         ValueError: If no valid displacement is found.
@@ -280,7 +284,7 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
         max_y,
     )
     ref_swath = target_area.values
-    swath_coords = translate_gcp_to_swath_coordinates(gcp_points, target_area, tif)
+    swath_coords, gcp_lonlats = translate_gcp_to_swath_coordinates(gcp_points, target_area, tif)
 
     swath = np.nan_to_num(swath, nan=0.0)
     swath = np.asfortranarray(swath, dtype=np.float32)
@@ -289,16 +293,21 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
     ref_swath = np.asfortranarray(ref_swath, dtype=np.float32)
 
     displacement = dc.calculate_covariance_displacement(swath_coords, swath, ref_swath, 48, 24)
+    ref_lons = []
+    ref_lats = []
+    gcps = []
+    for lonlat, coords, disp in zip(gcp_lonlats, swath_coords, displacement, strict=True):
+        if disp == INVALID_DISPLACEMENT:
+            continue
+        ref_lons.append(lonlat[0])
+        ref_lats.append(lonlat[1])
+        # gcps are line, col
+        gcps.append((coords[0] - disp[0], coords[1] - disp[1]))
+    # todo rerun for night time
 
-    if displacement == INVALID_DISPLACEMENT:
-        swath = calibrated_ds.sel(channel_name="4").channels.data
-        swath = np.nan_to_num(swath, nan=0.0)
-        swath = np.asfortranarray(swath, dtype=np.float32)
-
-        displacement = dc.calculate_covariance_displacement(swath_coords, swath, ref_swath, 48, 24)
-    if displacement == INVALID_DISPLACEMENT:
-        raise ValueError("No valid displacement is found")
-    return displacement
+    gcps = np.array(gcps)
+    logger.debug(f"Found {len(gcps)} valid daytime gcps")
+    return estimate_time_and_attitude_deviations(gcps, ref_lons, ref_lats, calibrated_ds["times"][0].values, calibrated_ds.attrs["tle"], 55.37)
 
 
 def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, reference_image_path):
@@ -326,21 +335,3 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
     return get_swath_displacement(calibrated_ds, reference_image_path)
 
 
-def offset_calibrated_channels(calibrated_ds, reference_image_path):
-    """Calculates and applies the offset for channel data from PyGAC calibrated dataset."""
-    dy, dx = get_swath_displacement(calibrated_ds, reference_image_path)
-    for channel in calibrated_ds.channel_name.values:
-        original_da = calibrated_ds.sel(channel_name=channel).channels
-
-        shifted_data = affine_transform(
-            original_da.data,
-            matrix=[[1, 0], [0, 1]],
-            offset=(-dy, -dx),
-            order=0,
-            mode="nearest",
-        )
-        calibrated_ds["channels"].loc[dict(channel_name=channel)] = xr.DataArray(
-            shifted_data, dims=original_da.dims, attrs={**original_da.attrs, "geo_translation": {"x": dx, "y": dy}}
-        )
-    calibrated_ds.attrs["geo_translation"] = {"x": dx, "y": dy}
-    return calibrated_ds
