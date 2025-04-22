@@ -220,7 +220,7 @@ def reproject_reference_into_swath(
     return resampled_data
 
 
-def get_swath_displacement(calibrated_ds, reference_image_path):
+def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     """Calculate the displacement between a swath image and a reference image.
 
     This function extracts a subset of the reference image, identifies
@@ -229,6 +229,7 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
 
     Args:
         calibrated_ds (xarray.Dataset): Calibrated swath dataset containing channel data.
+        sun_zen (2d Matrix): A 2d matrix with the same shape as the channel data containing the sun zenith angles.
         reference_image_path (str): Path to the reference GeoTIFF image.
 
     Returns:
@@ -238,6 +239,11 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
         ValueError: If no valid displacement is found.
     """
     swath = calibrated_ds.sel(channel_name="2").channels.data
+    night_swath = calibrated_ds.sel(channel_name="4").channels.data
+    max_val = np.nanmax(night_swath)
+    night_swath = max_val - night_swath
+    swath = np.where(sun_zen >= 90, night_swath, swath)
+
     swath_longitudes = calibrated_ds["longitude"]
     swath_latitudes = calibrated_ds["latitude"]
     tif = open_subset_tif(
@@ -303,11 +309,12 @@ def get_swath_displacement(calibrated_ds, reference_image_path):
         ref_lats.append(lonlat[1])
         # gcps are line, col
         gcps.append((coords[0] - disp[0], coords[1] - disp[1]))
-    # todo rerun for night time
 
     gcps = np.array(gcps)
     logger.debug(f"Found {len(gcps)} valid daytime gcps")
-    return estimate_time_and_attitude_deviations(gcps, ref_lons, ref_lats, calibrated_ds["times"][0].values, calibrated_ds.attrs["tle"], 55.37)
+    return estimate_time_and_attitude_deviations(
+        gcps, ref_lons, ref_lats, calibrated_ds["times"][0].values, calibrated_ds.attrs["tle"], 55.37
+    )
 
 
 def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, reference_image_path):
@@ -331,7 +338,6 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
     reader = reader_cls(tle_dir=tle_dir, tle_name=tle_file)
     reader.read(swath_file)
     calibrated_ds = reader.get_calibrated_dataset()
+    _, _, _, sun_zen, _ = reader.get_angles()
 
-    return get_swath_displacement(calibrated_ds, reference_image_path)
-
-
+    return get_swath_displacement(calibrated_ds, sun_zen, reference_image_path)
