@@ -238,11 +238,11 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     Raises:
         ValueError: If no valid displacement is found.
     """
-    swath = calibrated_ds.sel(channel_name="2").channels.data
+    swath = calibrated_ds.sel(channel_name="2").channels.data / np.cos(np.deg2rad(sun_zen))
     night_swath = calibrated_ds.sel(channel_name="4").channels.data
     max_val = np.nanmax(night_swath)
     night_swath = max_val - night_swath
-    swath = np.where(sun_zen >= 90, night_swath, swath)
+    swath = np.where(sun_zen >= 87, night_swath, swath)
 
     swath_longitudes = calibrated_ds["longitude"]
     swath_latitudes = calibrated_ds["latitude"]
