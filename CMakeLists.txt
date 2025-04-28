@@ -31,4 +31,6 @@ set_target_properties(displacement_calc PROPERTIES
     PREFIX ""
 )
 
-install(TARGETS displacement_calc DESTINATION ${CMAKE_SOURCE_DIR}/src/python/georeferencer)
+install(TARGETS displacement_calc
+    LIBRARY DESTINATION georeferencer
+)
