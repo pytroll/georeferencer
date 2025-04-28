@@ -41,6 +41,9 @@ package-dir = {"" = "src/python"}
 
 [tool.setuptools_scm]
 
+[tool.setuptools.package-data]
+"georeferencer" = ["*.so"]
+
 [tool.isort]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 profile = "black"
