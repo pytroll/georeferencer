@@ -303,7 +303,7 @@ std::vector<std::tuple<float, float>> calculate_covariance_displacement(const st
             float CL = !circumference_values.empty() ? *std::max_element(circumference_values.begin(), circumference_values.end()) : 0;
 
             float score = mean_cov + CL;
-            if (score < 237)
+            if (score < 240)
             {
                 auto [x0, y0] = subpixel_maximum(res, dy, dx);
                 x0 -= max_displacement;

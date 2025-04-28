@@ -76,8 +76,8 @@ def gcp_to_lonlat(gcp_x, gcp_y, geo_transform):
     Returns:
         tuple: (longitude, latitude) of the GCP in geographic coordinates.
     """
-    gcp_x_original = (gcp_x) * 16
-    gcp_y_original = (gcp_y) * 16
+    gcp_x_original = (gcp_x + 3) * 16
+    gcp_y_original = (gcp_y + 3) * 16
 
     xp, yp = xy(geo_transform, gcp_y_original, gcp_x_original)
 
@@ -168,15 +168,17 @@ def reproject_reference_into_swath(
     Returns:
         xarray.DataArray: The reprojected reference image aligned with the swath.
     """
-    lon_min_swath = np.nanmin(swath_longitudes.values)
-    lon_max_swath = np.nanmax(swath_longitudes.values)
-    lat_min_swath = np.nanmin(swath_latitudes.values)
-    lat_max_swath = np.nanmax(swath_latitudes.values)
+    swath_lons_values = swath_longitudes.values
+    swath_lats_values = swath_latitudes.values
+    lon_min_swath = np.nanmin(swath_lons_values)
+    lon_max_swath = np.nanmax(swath_lons_values)
+    lat_min_swath = np.nanmin(swath_lats_values)
+    lat_max_swath = np.nanmax(swath_lats_values)
 
-    lon_min_pixel = int((lon_min_swath - origin_x) / pixel_size_x)
-    lon_max_pixel = int((lon_max_swath - origin_x) / pixel_size_x)
-    lat_min_pixel = int((origin_y - lat_max_swath) / -pixel_size_y)
-    lat_max_pixel = int((origin_y - lat_min_swath) / -pixel_size_y)
+    lon_min_pixel = int(np.floor((lon_min_swath - origin_x) / pixel_size_x))
+    lon_max_pixel = int(np.ceil((lon_max_swath - origin_x) / pixel_size_x))
+    lat_min_pixel = int(np.floor((origin_y - lat_max_swath) / -pixel_size_y))
+    lat_max_pixel = int(np.ceil((origin_y - lat_min_swath) / -pixel_size_y))
 
     lon_min_source = max(int(min_x), lon_min_swath)
     lon_max_source = min(int(max_x), lon_max_swath)
@@ -190,25 +192,22 @@ def reproject_reference_into_swath(
 
     sub_matrix = matrix[lat_min_pixel:lat_max_pixel, lon_min_pixel:lon_max_pixel]
     height, width = sub_matrix.shape
-
-    if height % 2 != 0:
+    if height % 2:
         sub_matrix = sub_matrix[:-1, :]
-    if width % 2 != 0:
+    if width % 2:
         sub_matrix = sub_matrix[:, :-1]
 
-    sub_matrix = np.array(gcp_gen.downsample_2x2(sub_matrix), dtype=np.float32)
-    sub_matrix = da.from_array(sub_matrix, chunks=(1000, 1000))
+    sub_matrix = np.ascontiguousarray(sub_matrix)
+    sub_matrix = gcp_gen.downsample_2x2(sub_matrix)
+    sub_matrix = np.asarray(sub_matrix, dtype=np.float32)
 
-    area_id = "subgrid_area"
-    description = "reference image AD around swath lat,lons"
-    proj_id = "tif_projection"
-    proj_dict = crs
+    sub_matrix = da.from_array(sub_matrix, chunks=(512, 512))
 
     source_area = AreaDefinition(
-        area_id,
-        description,
-        proj_id,
-        proj_dict,
+        "subgrid_area",
+        "reference image AD around swath lat,lons",
+        "tif_projection",
+        crs,
         sub_matrix.shape[1],
         sub_matrix.shape[0],
         [lon_min_source, lat_min_source, lon_max_source, lat_max_source],
@@ -238,82 +237,78 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     Raises:
         ValueError: If no valid displacement is found.
     """
-    swath = calibrated_ds.sel(channel_name="2").channels.data / np.cos(np.deg2rad(sun_zen))
-    night_swath = calibrated_ds.sel(channel_name="4").channels.data
-    max_val = np.nanmax(night_swath)
-    night_swath = max_val - night_swath
-    swath = np.where(sun_zen >= 87, night_swath, swath)
+    day_swath = calibrated_ds.sel(channel_name="2").channels / np.cos(np.deg2rad(sun_zen))
+    night_swath = calibrated_ds.sel(channel_name="4").channels
 
-    swath_longitudes = calibrated_ds["longitude"]
-    swath_latitudes = calibrated_ds["latitude"]
+    max_val = night_swath.max()
+    night_swath = max_val - night_swath
+    swath = da.where(sun_zen >= 87, night_swath, day_swath)
+    swath = da.nan_to_num(swath).astype(np.float32)
+
+    lons = calibrated_ds["longitude"]
+    lats = calibrated_ds["latitude"]
     tif = open_subset_tif(
         reference_image_path,
-        np.min(swath_latitudes),
-        np.max(swath_latitudes),
-        np.min(swath_longitudes),
-        np.max(swath_longitudes),
+        np.min(lats),
+        np.max(lats),
+        np.min(lons),
+        np.max(lons),
     )
 
-    band_data = np.array(tif.sel(band=1).values)
-    band_data_f32 = band_data.astype(np.float32)
-    height, width = band_data_f32.shape
-    if height % 2 != 0:
-        band_data_f32 = band_data_f32[:-1, :]
-    if width % 2 != 0:
-        band_data_f32 = band_data_f32[:, :-1]
-    ref_image = gcp_gen.downsample_2x2(band_data_f32)
+    ref_image = tif.sel(band=1).values.astype(np.float32)
+    height, width = ref_image.shape
+    if height % 2:
+        ref_image = ref_image[:-1, :]
+    if width % 2:
+        ref_image = ref_image[:, :-1]
 
-    variance_array = gcp_gen.get_variance_array(ref_image, 8, 48)
-    gcp_candidates = gcp_gen.get_gcp_candidates(variance_array, 3)
-    gcp_points = gcp_gen.thin_gcp_candidates(variance_array, gcp_candidates, 11)
+    variance_array = gcp_gen.get_variance_array(gcp_gen.downsample_2x2(ref_image), 8, 48)
+    gcp_points = gcp_gen.thin_gcp_candidates(variance_array, gcp_gen.get_gcp_candidates(variance_array, 3), 11)
 
-    gt = tif.rio.transform()
-    origin_x = gt[2]
-    pixel_size_x = gt[0]
-    origin_y = gt[5]
-    pixel_size_y = gt[4]
-
-    min_x, min_y, max_x, max_y = tif.rio.bounds()
-
+    transform = tif.rio.transform()
+    bounds = tif.rio.bounds()
     target_area = reproject_reference_into_swath(
-        band_data_f32,
+        ref_image,
         tif.rio.crs.to_string(),
-        swath_longitudes,
-        swath_latitudes,
-        origin_x,
-        origin_y,
-        pixel_size_x,
-        pixel_size_y,
-        min_x,
-        min_y,
-        max_x,
-        max_y,
-    )
-    ref_swath = target_area.values
+        lons,
+        lats,
+        transform[2],
+        transform[5],
+        transform[0],
+        transform[4],
+        *bounds,
+    ).astype(np.float32)
+    del ref_image
     swath_coords, gcp_lonlats = translate_gcp_to_swath_coordinates(gcp_points, target_area, tif)
+    ref_swath = np.nan_to_num(target_area.values, nan=0.0)
+    del target_area
+    displacement = np.array(
+        dc.calculate_covariance_displacement(swath_coords, swath.compute(), ref_swath, 48, 24), dtype=np.float32
+    )
+    del ref_swath
 
-    swath = np.nan_to_num(swath, nan=0.0)
-    swath = np.asfortranarray(swath, dtype=np.float32)
+    swath_coords = np.array(swath_coords, dtype=np.float32)
+    gcp_lonlats = np.array(gcp_lonlats, dtype=np.float32)
 
-    ref_swath = np.nan_to_num(ref_swath, nan=0.0)
-    ref_swath = np.asfortranarray(ref_swath, dtype=np.float32)
+    valid_mask = ~(displacement[:, 0] <= INVALID_DISPLACEMENT[0])
+    valid_displacements = displacement[valid_mask]
+    if len(valid_displacements) == 0:
+        raise ValueError("No valid displacements found")
+    valid_swath_coords = swath_coords[valid_mask]
+    valid_gcp_lonlats = gcp_lonlats[valid_mask]
 
-    displacement = dc.calculate_covariance_displacement(swath_coords, swath, ref_swath, 48, 24)
-    ref_lons = []
-    ref_lats = []
-    gcps = []
-    for lonlat, coords, disp in zip(gcp_lonlats, swath_coords, displacement, strict=True):
-        if disp == INVALID_DISPLACEMENT:
-            continue
-        ref_lons.append(lonlat[0])
-        ref_lats.append(lonlat[1])
-        # gcps are line, col
-        gcps.append((coords[0] - disp[0], coords[1] - disp[1]))
+    gcps = np.column_stack(
+        [valid_swath_coords[:, 0] - valid_displacements[:, 0], valid_swath_coords[:, 1] - valid_displacements[:, 1]]
+    )
 
-    gcps = np.array(gcps)
     logger.debug(f"Found {len(gcps)} valid daytime gcps")
     return estimate_time_and_attitude_deviations(
-        gcps, ref_lons, ref_lats, calibrated_ds["times"][0].values, calibrated_ds.attrs["tle"], 55.37
+        gcps,
+        valid_gcp_lonlats[:, 0],
+        valid_gcp_lonlats[:, 1],
+        calibrated_ds["times"][0].values,
+        calibrated_ds.attrs["tle"],
+        55.37,
     )
 
 
