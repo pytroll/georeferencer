@@ -1,7 +1,6 @@
 """Setup for georeferencer module."""
 
 import os
-import shutil
 import subprocess
 
 from setuptools import Extension, setup
@@ -25,8 +24,8 @@ class CMakeBuildExt(build_ext_orig):
         if not os.path.exists(eigen_dir):
             os.makedirs(eigen_dir, exist_ok=True)
             subprocess.run(
-                "curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz "
-                "| tar xz --strip-components=1 -C eigen",
+                "curl -L https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz \
+                    | tar xz --strip-components=1 -C eigen",
                 shell=True,
                 check=True,
             )
@@ -43,22 +42,17 @@ class CMakeBuildExt(build_ext_orig):
             [
                 "cmake",
                 "-DCMAKE_BUILD_TYPE=Release",
-                f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={build_temp}",
-                f"-DPYBIND11_DIR={pybind11_dir}",
                 "-S",
                 ".",
                 "-B",
                 build_temp,
+                f"-DPYBIND11_DIR={pybind11_dir}",
+                f"-DCMAKE_INSTALL_PREFIX={os.path.abspath(self.build_lib)}",
             ]
         )
+
         subprocess.check_call(["cmake", "--build", build_temp])
         subprocess.check_call(["cmake", "--install", build_temp])
-        ext_build_lib = os.path.abspath(self.build_lib)
-        target_dir = os.path.join(ext_build_lib, "georeferencer")
-        os.makedirs(target_dir, exist_ok=True)
-
-        built_lib = os.path.join(build_temp, "displacement_calc.so")
-        shutil.copy(built_lib, target_dir)
 
 
 setup(
