@@ -1,6 +1,7 @@
 """Setup for georeferencer module."""
 
 import os
+import shutil
 import subprocess
 
 from setuptools import Extension, setup
@@ -53,6 +54,17 @@ class CMakeBuildExt(build_ext_orig):
 
         subprocess.check_call(["cmake", "--build", build_temp])
         subprocess.check_call(["cmake", "--install", build_temp])
+
+        so_dst = os.path.join(self.build_lib, "georeferencer", "displacement_calc.so")
+
+        if not os.path.exists(so_dst) and os.path.exists(
+            os.path.join(build_temp, "georeferencer", "displacement_calc.so")
+        ):
+            os.makedirs(os.path.dirname(so_dst), exist_ok=True)
+            shutil.copyfile(
+                os.path.join(build_temp, "georeferencer", "displacement_calc.so"),
+                so_dst,
+            )
 
 
 setup(
