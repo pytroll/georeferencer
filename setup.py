@@ -52,6 +52,7 @@ class CMakeBuildExt(build_ext_orig):
             ]
         )
         subprocess.check_call(["cmake", "--build", build_temp])
+        subprocess.check_call(["cmake", "--install", build_temp])
         ext_build_lib = os.path.abspath(self.build_lib)
         target_dir = os.path.join(ext_build_lib, "georeferencer")
         os.makedirs(target_dir, exist_ok=True)
