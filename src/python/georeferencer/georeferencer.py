@@ -76,8 +76,8 @@ def gcp_to_lonlat(gcp_x, gcp_y, geo_transform):
     Returns:
         tuple: (longitude, latitude) of the GCP in geographic coordinates.
     """
-    gcp_x_original = (gcp_x + 3) * 16
-    gcp_y_original = (gcp_y + 3) * 16
+    gcp_x_original = (gcp_x) * 16
+    gcp_y_original = (gcp_y) * 16
 
     xp, yp = xy(geo_transform, gcp_y_original, gcp_x_original)
 
