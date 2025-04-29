@@ -333,7 +333,8 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     gcps, valid_gcp_lonlats = _calculate_valid_gcps_from_swath_alignment(
         swath_coords, gcp_lonlats, swath, np.nan_to_num(target_area.values, nan=0.0)
     )
-    logger.debug(f"Found {len(gcps)} valid daytime gcps")
+    _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps)
+    logger.debug(f"Found {len(gcps)} valid gcps")
     return estimate_time_and_attitude_deviations(
         gcps,
         valid_gcp_lonlats[:, 0],
@@ -342,6 +343,15 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
         calibrated_ds.attrs["tle"],
         55.37,
     )
+
+
+def _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps):
+    """Translate gcp line to scanline offsets (zero-based).
+
+    Useful with passes that miss scanlines.
+    """
+    ints, decs = np.divmod(gcps[:, 0], 1)
+    gcps[:, 0] = calibrated_ds.scan_line_index.values[ints.astype(int)] - calibrated_ds.scan_line_index.values[0] + decs
 
 
 def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, reference_image_path):
