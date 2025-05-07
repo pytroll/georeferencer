@@ -341,7 +341,7 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
         valid_gcp_lonlats[:, 1],
         calibrated_ds["times"][0].values,
         calibrated_ds.attrs["tle"],
-        55.37,
+        calibrated_ds.attrs["max_scan_angle"],
     )
 
 
