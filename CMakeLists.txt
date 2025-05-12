@@ -24,5 +24,12 @@ target_include_directories(displacement_calc PRIVATE ${EIGEN3_INCLUDE_DIR})
 
 set_target_properties(displacement_calc PROPERTIES PREFIX "")
 
+add_custom_command(TARGET displacement_calc POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+        $<TARGET_FILE:displacement_calc>
+        ${CMAKE_SOURCE_DIR}/src/python/georeferencer/$<TARGET_FILE_NAME:displacement_calc>
+    COMMENT "Copying displacement_calc.so to src/python/georeferencer/"
+)
+
 install(TARGETS displacement_calc
         LIBRARY DESTINATION georeferencer)
