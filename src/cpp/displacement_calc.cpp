@@ -136,22 +136,22 @@ std::tuple<float, float> second_order_polynomial_fitting(const Eigen::MatrixXf &
 std::tuple<float, float> subpixel_maximum(const Eigen::MatrixXf &res, int dy, int dx)
 {
     if (dx < 1 || dx >= res.cols() - 1 || dy < 1 || dy >= res.rows() - 1)
+    {
         return {static_cast<float>(dx), static_cast<float>(dy)};
+    }
 
     const float x_vals[3] = {res(dy, dx - 1), res(dy, dx), res(dy, dx + 1)};
     const float a_x = (x_vals[2] + x_vals[0] - 2 * x_vals[1]) / 2.0f;
     const float b_x = (x_vals[2] - x_vals[0]) / 2.0f;
-    const float x0 = a_x < -1e-6f ? std::clamp(dx - b_x / (2 * a_x), 0.0f, res.cols() - 1.0f) : dx;
+    const float x0 = a_x < -1e-6f ? std::clamp(dx - b_x / (2 * a_x), 0.0f, float(res.cols() - 1)) : dx;
 
     const float y_vals[3] = {res(dy - 1, dx), res(dy, dx), res(dy + 1, dx)};
     const float a_y = (y_vals[2] + y_vals[0] - 2 * y_vals[1]) / 2.0f;
     const float b_y = (y_vals[2] - y_vals[0]) / 2.0f;
-    const float y0 = a_y < -1e-6f ? std::clamp(dy - b_y / (2 * a_y), 0.0f, res.rows() - 1.0f) : dy;
+    const float y0 = a_y < -1e-6f ? std::clamp(dy - b_y / (2 * a_y), 0.0f, float(res.rows() - 1)) : dy;
 
-    const float rx0 = std::round((x0 - dx) * 10.0f) / 10.0f + dx;
-    const float ry0 = std::round((y0 - dy) * 10.0f) / 10.0f + dy;
-
-    const float dx_diff = std::abs(rx0 - dx), dy_diff = std::abs(ry0 - dy);
+    const float dx_diff = std::abs(x0 - dx);
+    const float dy_diff = std::abs(y0 - dy);
 
     if (dx_diff <= 0.25f && dy_diff <= 0.25f)
         return second_order_polynomial_fitting(res, dy, dx);
@@ -159,7 +159,6 @@ std::tuple<float, float> subpixel_maximum(const Eigen::MatrixXf &res, int dy, in
         return third_order_polynomial_fitting(res, dy, dx, true);
     if (dy_diff > 0.25f && dx_diff <= 0.25f)
         return third_order_polynomial_fitting(res, dy, dx, false);
-
     return third_order_polynomial_fitting_4x4(res, dy, dx);
 }
 
@@ -247,43 +246,13 @@ Eigen::MatrixXf laplacian_operator(const Eigen::Ref<const Eigen::MatrixXf> &imag
     return laplacian;
 }
 
-std::pair<float, float> calculate_medians(const std::vector<std::pair<float, float>> &points)
+std::vector<std::tuple<float, float>> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
+                                                                        const Eigen::MatrixXf &image,
+                                                                        const Eigen::MatrixXf &reference_image,
+                                                                        int N = 48,
+                                                                        int max_displacement = 24)
 {
-    if (points.empty())
-    {
-        return {-100, -100};
-    }
-
-    std::vector<float> y_values, x_values;
-    for (const auto &p : points)
-    {
-        y_values.push_back(p.first);
-        x_values.push_back(p.second);
-    }
-
-    sort(y_values.begin(), y_values.end());
-    sort(x_values.begin(), x_values.end());
-
-    auto median = [](std::vector<float> &sorted_vec)
-    {
-        size_t n = sorted_vec.size();
-        if (n % 2 == 0)
-        {
-            return (sorted_vec[n / 2 - 1] + sorted_vec[n / 2]) / 2.0f;
-        }
-        return sorted_vec[n / 2];
-    };
-
-    return {median(y_values), median(x_values)};
-}
-
-std::pair<float, float> calculate_covariance_displacement(const std::vector<std::pair<int, int>> &swath_coords,
-                                                          const Eigen::MatrixXf &image,
-                                                          const Eigen::MatrixXf &reference_image,
-                                                          int N = 48,
-                                                          int max_displacement = 24)
-{
-    std::vector<std::pair<float, float>> displacements;
+    std::vector<std::tuple<float, float>> displacements(swath_coords.size());
     int half_N = N / 2;
     const int s{1};
     Eigen::MatrixXf lap_image = laplacian_operator(image, s);
@@ -291,14 +260,12 @@ std::pair<float, float> calculate_covariance_displacement(const std::vector<std:
 
 #pragma omp parallel
     {
-        std::vector<std::pair<float, float>> local_displacements;
-
 #pragma omp for nowait
         for (size_t i = 0; i < swath_coords.size(); ++i)
         {
             const auto &coord = swath_coords[i];
             int y = coord.first, x = coord.second;
-
+            displacements[i] = {-100, -100};
             if (y - half_N < s || y + half_N > lap_image.rows() - s ||
                 x - half_N < s || x + half_N > lap_image.cols() - s)
             {
@@ -317,22 +284,25 @@ std::pair<float, float> calculate_covariance_displacement(const std::vector<std:
 
             Eigen::MatrixXf::Index maxRow, maxCol;
             res.maxCoeff(&maxRow, &maxCol);
+            float apex_val = res(maxRow, maxCol);
+            if (apex_val < 254.5f)
+            {
+                continue;
+            }
+            int dy = maxRow, dx = maxCol;
             float mean_cov = res.mean();
-            int dy = maxRow, dx = maxCol, radius = 2;
-            std::vector<float> circumference_values;
-
+            const int R = 2;
+            std::vector<float> circ;
+            circ.reserve(100);
             for (int t = 0; t < 100; ++t)
             {
-                double angle = 2 * M_PI * t / 100;
-                int circ_y = static_cast<int>(dy + radius * sin(angle));
-                int circ_x = static_cast<int>(dx + radius * cos(angle));
-                if (circ_y >= 0 && circ_y < res.rows() && circ_x >= 0 && circ_x < res.cols())
-                {
-                    circumference_values.push_back(res(circ_y, circ_x));
-                }
+                double theta = 2 * M_PI * t / 100.0;
+                int y = static_cast<int>(std::round(maxRow + R * std::sin(theta)));
+                int x = static_cast<int>(std::round(maxCol + R * std::cos(theta)));
+                if (y >= 0 && y < res.rows() && x >= 0 && x < res.cols())
+                    circ.push_back(res(y, x));
             }
-
-            float CL = !circumference_values.empty() ? *std::max_element(circumference_values.begin(), circumference_values.end()) : 0;
+            float CL = circ.empty() ? 0.f : *std::max_element(circ.begin(), circ.end());
 
             float score = mean_cov + CL;
             if (score < 237)
@@ -340,26 +310,12 @@ std::pair<float, float> calculate_covariance_displacement(const std::vector<std:
                 auto [x0, y0] = subpixel_maximum(res, dy, dx);
                 x0 -= max_displacement;
                 y0 -= max_displacement;
-                x0 = std::round(x0 * 10.0f) / 10.0f;
-                y0 = std::round(y0 * 10.0f) / 10.0f;
-                local_displacements.emplace_back(y0, x0);
+                if (std::abs(y0) < max_displacement && std::abs(x0) < max_displacement)
+                    displacements[i] = {y0, x0};
             }
         }
-
-#pragma omp critical
-        displacements.insert(displacements.end(), local_displacements.begin(), local_displacements.end());
     }
-
-    std::vector<std::pair<float, float>> valid_displacements;
-    for (const auto &d : displacements)
-    {
-        if (d.first > -max_displacement && d.second > -max_displacement)
-        {
-            valid_displacements.push_back(d);
-        }
-    }
-
-    return calculate_medians(valid_displacements);
+    return displacements;
 }
 
 PYBIND11_MODULE(displacement_calc, m)

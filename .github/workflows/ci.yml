@@ -39,6 +39,6 @@ jobs:
     # Run pytest on the tests directory
     - name: Run tests with pytest
       run: |
-        python -m pip install -e .[test]
+        python -m pip install .[test]
         echo "PYTHONPATH=$(pwd)/src/python" >> $GITHUB_ENV
         python -m pytest ./tests

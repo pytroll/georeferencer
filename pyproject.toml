@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Python package for georeferencing satellite imagery."
 readme = "README.md"
 authors = [
-    { name = "Jacob Nilsson"},
+    { name = "Jacob Nilsson", email = "jacobnilsson95@hotmail.com" },
     { name = "Martin Raspaud", email = "martin.raspaud@smhi.se" },
 ]
 requires-python = ">=3.11"
@@ -22,6 +22,7 @@ dependencies = [
     "pyresample>=1.33.0",
     "rioxarray>=0.18.2",
     "scipy>=1.15.2",
+    "pyorbital>1.10.0",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,10 @@ intel = [
 
 [tool.setuptools]
 package-dir = {"" = "src/python"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+"georeferencer" = ["*.so"]
 
 [tool.setuptools_scm]
 
