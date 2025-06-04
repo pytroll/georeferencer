@@ -1,3 +1,20 @@
+## Version 0.2.0 (2025/05/26)
+
+### Issues Closed
+
+* [Issue 4](https://github.com/pytroll/georeferencer/issues/4) - Fix email address
+
+In this release 1 issue was closed.
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 12](https://github.com/pytroll/georeferencer/pull/12) - Cpp change displacement pair to vector
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.1.0 (2025/04/09)
 
 
