@@ -6,11 +6,16 @@ displacement between a swath image and a reference image.
 """
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 import dask.array as da
 import numpy as np
 import rioxarray
+from numba import njit
 from pyorbital.geoloc_avhrr import estimate_time_and_attitude_deviations
+from pyproj import Geod
 from pyresample import gradient
 from pyresample.geometry import AreaDefinition, SwathDefinition
 from rasterio.transform import xy
@@ -20,6 +25,7 @@ from scipy.spatial import cKDTree
 import georeferencer.displacement_calc as dc
 import georeferencer.gcp_generation as gcp_gen
 
+_geod = Geod(ellps="WGS84")
 logger = logging.getLogger(__name__)
 INVALID_DISPLACEMENT = (-100, -100)
 
@@ -64,7 +70,7 @@ def open_subset_tif(filepath, min_lat, max_lat, min_lon, max_lon, buffer=5):
     Returns:
         xarray.DataArray: A Dask-backed xarray DataArray containing the subset of the image.
     """
-    dataset = rioxarray.open_rasterio(filepath, engine="rasterio", chunks="auto")
+    dataset = rioxarray.open_rasterio(filepath, engine="rasterio", chunks=512)
     subset = subset_from_bounds(buffer, dataset, max_lat, max_lon, min_lat, min_lon)
 
     return subset
@@ -255,7 +261,7 @@ def _calculate_valid_gcps_from_swath_alignment(swath_coords, gcp_lonlats, swath,
     return valid_gcps, valid_gcp_lonlats
 
 
-def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
+def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path):
     """Calculate the displacement between a swath image and a reference image.
 
     This function extracts a subset of the reference image, identifies
@@ -265,6 +271,7 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     Args:
         calibrated_ds (xarray.Dataset): Calibrated swath dataset containing channel data.
         sun_zen (2d Matrix): A 2d matrix with the same shape as the channel data containing the sun zenith angles.
+        sat_zen (2d Matrix): A 2d matrix with the same shape as the channel data containing the satellite zenith angles.
         reference_image_path (str): Path to the reference GeoTIFF image.
 
     Returns:
@@ -273,6 +280,9 @@ def get_swath_displacement(calibrated_ds, sun_zen, reference_image_path):
     Raises:
         ValueError: If no valid displacement is found.
     """
+    calibrated_ds = orthocorrection(
+        calibrated_ds, sat_zen, "/home/k000886/Downloads/copernicus_resampled_250m/final_250m_merged.tif"
+    )
     swath = _build_swath_image(calibrated_ds, sun_zen)
     ref_image = _load_reference_image(reference_image_path, calibrated_ds)
     geo_transform = ref_image.rio.transform()
@@ -324,6 +334,245 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
     reader = reader_cls(tle_dir=tle_dir, tle_name=tle_file)
     reader.read(swath_file)
     calibrated_ds = reader.get_calibrated_dataset()
-    _, _, _, sun_zen, _ = reader.get_angles()
+    _, sat_zen, _, sun_zen, _ = reader.get_angles()
 
-    return get_swath_displacement(calibrated_ds, sun_zen, reference_image_path)
+    return get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path)
+
+
+@njit(nogil=True)
+def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
+    npix = swath_lats_i.shape[0]
+    half = npix // 2
+    n_sup = dists.shape[0]
+
+    for j in range(npix):
+        idx_nom = j * 4
+        found = False
+        if j < half:
+            for k in range(0, idx_nom + 1):
+                delta = dists[idx_nom] - dists[k]
+                if delta < 0:
+                    delta = -delta
+                if elev[k] >= delta * tanz[j]:
+                    out_lat[j] = lat_sup[k]
+                    out_lon[j] = lon_sup[k]
+                    found = True
+                    break
+        else:
+            for k in range(n_sup - 1, idx_nom - 1, -1):
+                delta = dists[idx_nom] - dists[k]
+                if delta < 0:
+                    delta = -delta
+                if elev[k] >= delta * tanz[j]:
+                    out_lat[j] = lat_sup[k]
+                    out_lon[j] = lon_sup[k]
+                    found = True
+                    break
+        if not found:
+            out_lat[j] = swath_lats_i[j]
+            out_lon[j] = swath_lons_i[j]
+
+
+def _process_scanline(i, dem_swath, lons, lats, swath_lats, swath_lons, sat_zen):
+    elev = dem_swath[i]
+    lon_sup = lons[i]
+    lat_sup = lats[i]
+
+    # Calculate distances
+    lon0, lat0 = lon_sup[:-1], lat_sup[:-1]
+    lon1, lat1 = lon_sup[1:], lat_sup[1:]
+    _, _, seg = _geod.inv(lon0, lat0, lon1, lat1)
+
+    dists = np.zeros(len(seg) + 1, dtype=np.float64)
+    dists[1:] = np.cumsum(seg)
+
+    # Calculate tan of view angles
+    tanz = np.tan(np.deg2rad(sat_zen[i]))
+
+    out_lat_line = np.full_like(swath_lats[i], np.nan, dtype=np.float64)
+    out_lon_line = np.full_like(swath_lons[i], np.nan, dtype=np.float64)
+
+    _orthocorrect_line(elev, dists, tanz, swath_lats[i], swath_lons[i], lon_sup, lat_sup, out_lat_line, out_lon_line)
+
+    return out_lat_line, out_lon_line
+
+
+def _get_dem_swath(dem_file_path, min_lats, max_lats, min_lon, max_lon, lons_sup, lats_sup):
+    src = open_subset_tif(dem_file_path, min_lats, max_lats, min_lon, max_lon).squeeze(drop=True)
+
+    transform = src.rio.transform()
+    x_min, y_max, x_res, y_res = transform.c, transform.f, transform.a, transform.e
+    nrows, ncols = src.sizes["y"], src.sizes["x"]
+
+    cols = np.round((lons_sup - x_min) / x_res).astype(int)
+    rows = np.round((lats_sup - y_max) / y_res).astype(int)
+
+    valid_mask = (rows >= 0) & (rows < nrows) & (cols >= 0) & (cols < ncols)
+
+    rows_flat = rows.ravel()[valid_mask.ravel()]
+    cols_flat = cols.ravel()[valid_mask.ravel()]
+
+    values = src.data.vindex[(rows_flat, cols_flat)].compute(scheduler="threads")
+
+    output = np.full(lons_sup.size, np.nan)
+    output[np.where(valid_mask.ravel())[0]] = values
+
+    return output.reshape(lons_sup.shape)
+
+
+def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
+    """Performs orthocorrection on latitude and longitude based on satellite viewing angles."""
+    import time
+
+    from pygac.pygac_geotiepoints import lat_lon_interpolator
+
+    start = time.time()
+    swath_lons = calibrated_ds["longitude"]
+    swath_lats = calibrated_ds["latitude"]
+    lons, lats = lat_lon_interpolator(swath_lons, swath_lats, np.arange(2048), np.arange(0, 2048, 0.25))
+
+    dem_swath = _get_dem_swath(
+        dem_file_path, np.min(swath_lats), np.max(swath_lats), np.min(swath_lons), np.max(swath_lons), lons, lats
+    )
+    out_lats = np.full_like(swath_lats, np.nan, dtype=np.float64)
+    out_lons = np.full_like(swath_lons, np.nan, dtype=np.float64)
+    nscan, _ = swath_lons.shape
+
+    process_func = partial(
+        _process_scanline,
+        dem_swath=dem_swath,
+        lons=lons,
+        lats=lats,
+        swath_lats=swath_lats.values,
+        swath_lons=swath_lons.values,
+        sat_zen=sat_zen,
+    )
+
+    num_workers = int(os.getenv("THREADS", os.cpu_count() or 4))
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        results = executor.map(process_func, range(nscan))
+
+        for i, (lat_line, lon_line) in enumerate(results):
+            out_lats[i] = lat_line
+            out_lons[i] = lon_line
+    ortho_ds = calibrated_ds.copy()
+    ortho_ds["latitude"].values = out_lats
+    ortho_ds["longitude"].values = out_lons
+
+    end = time.time()
+    logger.debug(f"Time taken: {end - start:.2f} seconds")
+    return ortho_ds
+
+
+# @njit
+# def __orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
+#    # This Numba-accelerated function performs the actual intersection search: for each FOV (nominal sample index j),
+#    #  it walks inward from the swath edge until it finds the first elevation point satisfying
+#    # elev >= distance * tan(VZA).
+#    #  That directly implements “linearly interpolates the elevation profile and tracks its intersections with the line
+#    # of sight of each FOV.”
+#    npix = swath_lats_i.shape[0]
+#    half = npix // 2
+#    n_sup = dists.shape[0]
+#
+#    for j in range(npix):
+#        idx_nom = j * 4
+#        found = False
+#        if j < half:
+#            # search from edge toward center
+#            for k in range(0, idx_nom + 1):
+#                delta = dists[idx_nom] - dists[k]
+#                if delta < 0:
+#                    delta = -delta
+#                if elev[k] >= delta * tanz[j]:
+#                    out_lat[j] = lat_sup[k]
+#                    out_lon[j] = lon_sup[k]
+#                    found = True
+#                    break
+#        else:
+#            # search from opposite edge inward
+#            for k in range(n_sup - 1, idx_nom - 1, -1):
+#                delta = dists[idx_nom] - dists[k]
+#                if delta < 0:
+#                    delta = -delta
+#                if elev[k] >= delta * tanz[j]:
+#                    out_lat[j] = lat_sup[k]
+#                    out_lon[j] = lon_sup[k]
+#                    found = True
+#                    break
+#        if not found:
+#            out_lat[j] = swath_lats_i[j]
+#            out_lon[j] = swath_lons_i[j]
+#
+#
+# def _orthocorrection(calibrated_ds, sat_zen, dem_file_path):
+#    from pygac.pygac_geotiepoints import lat_lon_interpolator
+#
+#    swath_lons = calibrated_ds["longitude"]
+#    swath_lats = calibrated_ds["latitude"]
+#
+#    src = open_subset_tif(
+#        dem_file_path,
+#        np.min(swath_lats),
+#        np.max(swath_lats),
+#        np.min(swath_lons),
+#        np.max(swath_lons),
+#    ).squeeze(drop=True)
+#    # Along scan profile supersampled by factor 4
+#    lons, lats = lat_lon_interpolator(swath_lons, swath_lats, np.arange(2048), np.arange(0, 2048, 0.25))
+#
+#    transform = src.rio.transform()
+#    x_min, y_max, x_res, y_res = transform.c, transform.f, transform.a, transform.e
+#    nrows, ncols = src.sizes["y"], src.sizes["x"]
+#    cols = np.round((lons - x_min) / x_res).astype(int)
+#    rows = np.round((lats - y_max) / y_res).astype(int)
+#    valid_mask = (rows >= 0) & (rows < nrows) & (cols >= 0) & (cols < ncols)
+#
+#    valid_flat = valid_mask.ravel()
+#    rows_flat = rows.ravel()
+#    cols_flat = cols.ravel()
+#    valid_indices = np.where(valid_flat)[0]
+#    valid_rows = rows_flat[valid_flat]
+#    valid_cols = cols_flat[valid_flat]
+#
+#    output_flat = np.full(valid_flat.shape[0], np.nan)
+#
+#    chunk_size = 1000000
+#    for i in range(0, len(valid_rows), chunk_size):
+#        chunk_rows = valid_rows[i : i + chunk_size]
+#        chunk_cols = valid_cols[i : i + chunk_size]
+#        chunk_indices = valid_indices[i : i + chunk_size]
+#
+#        chunk_values = src.data.vindex[(chunk_rows, chunk_cols)]
+#        output_flat[chunk_indices] = chunk_values.compute(scheduler="single-threaded")
+#
+#    dem_swath = output_flat.reshape(lons.shape)
+#
+#    out_lats = np.full_like(swath_lats, np.nan, dtype=np.float64)
+#    out_lons = np.full_like(swath_lons, np.nan, dtype=np.float64)
+#    nscan, npix = swath_lons.shape
+#    swath_lons = swath_lons.values
+#    swath_lats = swath_lats.values
+#    for i in range(nscan):
+#        elev = dem_swath[i]
+#        lon_sup = lons[i]
+#        lat_sup = lats[i]
+#        # Here we compute the cumulative ground distances along the supersampled scan profile. This matches the paper’s
+#        # description: “compute the along-scan profile of the surface elevation” and then find distances between
+#        # successive supersampled points.
+#        lon0, lat0 = lon_sup[:-1], lat_sup[:-1]
+#        lon1, lat1 = lon_sup[1:], lat_sup[1:]
+#        _, _, seg = _geod.inv(lon0, lat0, lon1, lat1)
+#        # The array dists holds cumulative distances from the swath edge (or opposite edge) to each supersampled pixel,
+#        # matching the paper’s use of ground planimetric distances along the scan.
+#        dists = np.empty(seg.size + 1, dtype=np.float64)
+#        dists[0] = 0.0
+#        dists[1:] = np.cumsum(seg)
+#        # The variable tanz is the tangent of the local view zenith angles, used to project the line of sight into the
+#        # elevation profile as described: “line of sight is projected ... by using the local VZA.”
+#        tanz = np.tan(np.deg2rad(sat_zen[i]))
+#        _orthocorrect_line(elev, dists, tanz, swath_lats[i], swath_lons[i], lon_sup, lat_sup, out_lats[i], out_lons[i])
+#    ortho_ds = calibrated_ds.copy()
+#    ortho_ds["latitude"].values = out_lats
+#    ortho_ds["longitude"].values = out_lons
+#    return ortho_ds
