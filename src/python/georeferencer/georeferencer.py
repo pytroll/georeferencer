@@ -13,6 +13,7 @@ from functools import partial
 import dask.array as da
 import numpy as np
 import rioxarray
+import xarray as xr
 from numba import njit
 from pyorbital.geoloc_avhrr import estimate_time_and_attitude_deviations
 from pyproj import Geod
@@ -295,6 +296,13 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     gcps, valid_gcp_lonlats = _calculate_valid_gcps_from_swath_alignment(
         swath_coords, gcp_lonlats, swath, np.nan_to_num(target_area.values, nan=0.0)
     )
+    gcp_data = xr.Dataset(
+        {
+            "gcp_lonlats": (("gcp", "lonlat"), np.array(valid_gcp_lonlats)),
+            "gcps": (("gcp", "xy"), np.array(gcps)),
+        }
+    )
+    calibrated_ds = xr.merge([calibrated_ds, gcp_data])
     _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps)
     logger.debug(f"Found {len(gcps)} valid gcps")
     return estimate_time_and_attitude_deviations(
@@ -316,7 +324,7 @@ def _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps):
     gcps[:, 0] = calibrated_ds.scan_line_index.values[ints.astype(int)] - calibrated_ds.scan_line_index.values[0] + decs
 
 
-def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, reference_image_path, dem_path):
+def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, reference_image_path, dem_path=None):
     """Compute swath displacement using a satellite swath file and a reference image.
 
     This function reads a swath file, retrieves the calibrated dataset,
