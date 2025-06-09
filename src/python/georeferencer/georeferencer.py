@@ -96,33 +96,36 @@ def gcp_to_lonlat(gcp_x, gcp_y, geo_transform):
     return xp, yp
 
 
-def translate_gcp_to_swath_coordinates(gcp_array, lons, lats, geo_transform):
+def translate_gcp_to_swath_coordinates(gcp_array, calibrated_ds, geo_transform):
     """Convert GCP pixel coordinates into swath image coordinates based on latitude and longitude values.
 
     Args:
         gcp_array (array-like): Array of GCP (x, y) pixel coordinates.
-        lons (2D matrix): longitude values.
-        lats (2D matrix): latitude values.
+        calibrated_ds (xarray.Dataset): Calibrated swath dataset containing longitude and latitude data.
         geo_transform (Affine): Geotransform matrix for coordinate conversion.
 
     Returns:
         (gcp coords, gcp lonlats): valid GCPs that fall within the swath image bounds, image coords and lonlats.
     """
-    longitudes = lons.values
-    latitudes = lats.values
-    image_shape = longitudes.shape
+    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
+        lons = calibrated_ds["tc_lons"].values
+        lats = calibrated_ds["tc_lats"].values
+    else:
+        lons = calibrated_ds["longitude"].values
+        lats = calibrated_ds["latitude"].values
 
-    lon_lat_pairs = np.column_stack((longitudes.ravel(), latitudes.ravel()))
+    image_shape = lons.shape
+    lon_lat_pairs = np.column_stack((lons.ravel(), lats.ravel()))
     valid_mask = ~np.isnan(lon_lat_pairs).any(axis=1)
     valid_lon_lat_pairs = lon_lat_pairs[valid_mask]
 
     # TODO change to another KDTree
     source_geo_def = cKDTree(valid_lon_lat_pairs)
 
-    min_lon = np.nanmin(longitudes)
-    max_lon = np.nanmax(longitudes)
-    min_lat = np.nanmin(latitudes)
-    max_lat = np.nanmax(latitudes)
+    min_lon = np.nanmin(lons)
+    max_lon = np.nanmax(lons)
+    min_lat = np.nanmin(lats)
+    max_lat = np.nanmax(lats)
 
     nr_of_valid_gcps = 0
     swath_cords = []
@@ -201,8 +204,13 @@ def _build_swath_image(calibrated_ds, sun_zen):
 
 def _load_reference_image(reference_image_path, calibrated_ds):
     """Loads a subset of the reference image based on swath bounds."""
-    lons = calibrated_ds["longitude"]
-    lats = calibrated_ds["latitude"]
+    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
+        lons = calibrated_ds["tc_lons"]
+        lats = calibrated_ds["tc_lats"]
+    else:
+        lons = calibrated_ds["longitude"]
+        lats = calibrated_ds["latitude"]
+
     tif = open_subset_tif(
         reference_image_path,
         np.min(lats),
@@ -215,10 +223,16 @@ def _load_reference_image(reference_image_path, calibrated_ds):
 
 def _reproject_to_swath(ref_image, calibrated_ds):
     """Reprojects the reference image into the swath coordinate system."""
+    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
+        lons = calibrated_ds["tc_lons"]
+        lats = calibrated_ds["tc_lats"]
+    else:
+        lons = calibrated_ds["longitude"]
+        lats = calibrated_ds["latitude"]
     return reproject_reference_into_swath(
         ref_image,
-        calibrated_ds["longitude"],
-        calibrated_ds["latitude"],
+        lons,
+        lats,
     ).astype(np.float32)
 
 
@@ -283,8 +297,6 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     Raises:
         ValueError: If no valid displacement is found.
     """
-    lons = calibrated_ds["longitude"]
-    lats = calibrated_ds["latitude"]
     if dem_path:
         calibrated_ds = orthocorrection(calibrated_ds, sat_zen, dem_path)
     swath = _build_swath_image(calibrated_ds, sun_zen)
@@ -292,7 +304,7 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     geo_transform = ref_image.rio.transform()
     target_area = _reproject_to_swath(ref_image, calibrated_ds)
     gcp_points = _generate_gcps(ref_image)
-    swath_coords, gcp_lonlats = translate_gcp_to_swath_coordinates(gcp_points, lons, lats, geo_transform)
+    swath_coords, gcp_lonlats = translate_gcp_to_swath_coordinates(gcp_points, calibrated_ds, geo_transform)
     gcps, valid_gcp_lonlats = _calculate_valid_gcps_from_swath_alignment(
         swath_coords, gcp_lonlats, swath, np.nan_to_num(target_area.values, nan=0.0)
     )
@@ -358,31 +370,25 @@ def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, l
     n_sup = dists.shape[0]
 
     for j in range(npix):
-        idx_nom = j * 4
-        found = False
-        if j < half:
-            for k in range(0, idx_nom + 1):
-                delta = dists[idx_nom] - dists[k]
-                if delta < 0:
-                    delta = -delta
-                if elev[k] >= delta * tanz[j]:
-                    out_lat[j] = lat_sup[k]
-                    out_lon[j] = lon_sup[k]
-                    found = True
-                    break
-        else:
-            for k in range(n_sup - 1, idx_nom - 1, -1):
-                delta = dists[idx_nom] - dists[k]
-                if delta < 0:
-                    delta = -delta
-                if elev[k] >= delta * tanz[j]:
-                    out_lat[j] = lat_sup[k]
-                    out_lon[j] = lon_sup[k]
-                    found = True
-                    break
-        if not found:
+        if tanz[j] == 0:
             out_lat[j] = swath_lats_i[j]
             out_lon[j] = swath_lons_i[j]
+            continue
+        idx_nom = j * 4
+        best_idx = idx_nom
+        if j < half:
+            for k in range(0, idx_nom + 1):
+                delta = abs(dists[idx_nom] - dists[k])
+                if elev[k] > delta * tanz[j]:
+                    best_idx = k
+        else:
+            for k in range(n_sup - 1, idx_nom - 1, -1):
+                delta = abs(dists[idx_nom] - dists[k])
+                if elev[k] > delta * tanz[j]:
+                    best_idx = k
+
+        out_lat[j] = lat_sup[best_idx]
+        out_lon[j] = lon_sup[best_idx]
 
 
 def _process_scanline(i, dem_swath, lons, lats, swath_lats, swath_lons, sat_zen):
@@ -434,11 +440,8 @@ def _get_dem_swath(dem_file_path, min_lats, max_lats, min_lon, max_lon, lons_sup
 
 def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
     """Performs orthocorrection on latitude and longitude based on satellite viewing angles."""
-    import time
-
     from pygac.pygac_geotiepoints import lat_lon_interpolator
 
-    start = time.time()
     swath_lons = calibrated_ds["longitude"]
     swath_lats = calibrated_ds["latitude"]
     lons, lats = lat_lon_interpolator(swath_lons, swath_lats, np.arange(2048), np.arange(0, 2048, 0.25))
@@ -467,10 +470,64 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
         for i, (lat_line, lon_line) in enumerate(results):
             out_lats[i] = lat_line
             out_lons[i] = lon_line
-    ortho_ds = calibrated_ds.copy()
-    ortho_ds["latitude"].values = out_lats
-    ortho_ds["longitude"].values = out_lons
+    calibrated_ds["tc_lats"] = (calibrated_ds["latitude"].dims, out_lats)
+    calibrated_ds["tc_lons"] = (calibrated_ds["longitude"].dims, out_lons)
 
-    end = time.time()
-    logger.debug(f"Time taken: {end - start:.2f} seconds")
-    return ortho_ds
+    return calibrated_ds
+
+
+# -----------------------------------------------------------------------------
+# Pure-Python implementations (for testing)
+# -----------------------------------------------------------------------------
+def _orthocorrect_line_py(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
+    npix = swath_lats_i.shape[0]
+    half = npix // 2
+    n_sup = dists.shape[0]
+
+    for j in range(npix):
+        if tanz[j] == 0:
+            out_lat[j] = swath_lats_i[j]
+            out_lon[j] = swath_lons_i[j]
+            continue
+        idx_nom = j * 4
+        best_idx = idx_nom
+        if j < half:
+            for k in range(0, idx_nom + 1):
+                delta = abs(dists[idx_nom] - dists[k])
+                if elev[k] > delta * tanz[j]:
+                    best_idx = k
+        else:
+            for k in range(n_sup - 1, idx_nom - 1, -1):
+                delta = abs(dists[idx_nom] - dists[k])
+                if elev[k] > delta * tanz[j]:
+                    best_idx = k
+
+        out_lat[j] = lat_sup[best_idx]
+        out_lon[j] = lon_sup[best_idx]
+
+
+# -----------------------------------------------------------------------------
+# Pure-Python implementations (for testing)
+# -----------------------------------------------------------------------------
+def _process_scanline_py(i, dem_swath, lons, lats, swath_lats, swath_lons, sat_zen):
+    elev = dem_swath[i]
+    lon_sup = lons[i]
+    lat_sup = lats[i]
+
+    # Calculate distances
+    lon0, lat0 = lon_sup[:-1], lat_sup[:-1]
+    lon1, lat1 = lon_sup[1:], lat_sup[1:]
+    _, _, seg = _geod.inv(lon0, lat0, lon1, lat1)
+
+    dists = np.zeros(len(seg) + 1, dtype=np.float64)
+    dists[1:] = np.cumsum(seg)
+
+    # Calculate tan of view angles
+    tanz = np.tan(np.deg2rad(sat_zen[i]))
+
+    out_lat_line = np.full_like(swath_lats[i], np.nan, dtype=np.float64)
+    out_lon_line = np.full_like(swath_lons[i], np.nan, dtype=np.float64)
+
+    _orthocorrect_line_py(elev, dists, tanz, swath_lats[i], swath_lons[i], lon_sup, lat_sup, out_lat_line, out_lon_line)
+
+    return out_lat_line, out_lon_line
