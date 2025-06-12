@@ -367,8 +367,7 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
 def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
     npix = swath_lats_i.shape[0]
     half = npix // 2
-    n_sup = dists.shape[0]
-
+    sup_nadir = half * 4
     for j in range(npix):
         if tanz[j] == 0:
             out_lat[j] = swath_lats_i[j]
@@ -377,12 +376,12 @@ def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, l
         idx_nom = j * 4
         best_idx = idx_nom
         if j < half:
-            for k in range(0, idx_nom + 1):
+            for k in range(idx_nom, sup_nadir):
                 delta = abs(dists[idx_nom] - dists[k])
                 if elev[k] > delta * tanz[j]:
                     best_idx = k
         else:
-            for k in range(n_sup - 1, idx_nom - 1, -1):
+            for k in range(idx_nom, sup_nadir, -1):
                 delta = abs(dists[idx_nom] - dists[k])
                 if elev[k] > delta * tanz[j]:
                     best_idx = k
@@ -470,9 +469,9 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
         for i, (lat_line, lon_line) in enumerate(results):
             out_lats[i] = lat_line
             out_lons[i] = lon_line
+
     calibrated_ds["tc_lats"] = (calibrated_ds["latitude"].dims, out_lats)
     calibrated_ds["tc_lons"] = (calibrated_ds["longitude"].dims, out_lons)
-
     return calibrated_ds
 
 
@@ -482,8 +481,7 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
 def _orthocorrect_line_py(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
     npix = swath_lats_i.shape[0]
     half = npix // 2
-    n_sup = dists.shape[0]
-
+    sup_nadir = half * 4
     for j in range(npix):
         if tanz[j] == 0:
             out_lat[j] = swath_lats_i[j]
@@ -492,12 +490,12 @@ def _orthocorrect_line_py(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup
         idx_nom = j * 4
         best_idx = idx_nom
         if j < half:
-            for k in range(0, idx_nom + 1):
+            for k in range(idx_nom, sup_nadir):
                 delta = abs(dists[idx_nom] - dists[k])
                 if elev[k] > delta * tanz[j]:
                     best_idx = k
         else:
-            for k in range(n_sup - 1, idx_nom - 1, -1):
+            for k in range(idx_nom, sup_nadir, -1):
                 delta = abs(dists[idx_nom] - dists[k])
                 if elev[k] > delta * tanz[j]:
                     best_idx = k
