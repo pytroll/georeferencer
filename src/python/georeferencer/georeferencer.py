@@ -366,8 +366,8 @@ def get_swath_displacement_with_filename(swath_file, tle_dir, tle_file, referenc
 @njit(nogil=True)
 def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
     npix = swath_lats_i.shape[0]
-    half = npix // 2
-    sup_nadir = half * 4
+    nadir = np.argmin(tanz)
+    sup_nadir = nadir * 4
     for j in range(npix):
         if tanz[j] == 0:
             out_lat[j] = swath_lats_i[j]
@@ -375,15 +375,15 @@ def _orthocorrect_line(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, l
             continue
         idx_nom = j * 4
         best_idx = idx_nom
-        if j < half:
+        if idx_nom <= sup_nadir:
             for k in range(idx_nom, sup_nadir):
-                delta = abs(dists[idx_nom] - dists[k])
-                if elev[k] > delta * tanz[j]:
+                delta = abs(dists[k] - dists[idx_nom])
+                if elev[k] > (delta / tanz[j]):
                     best_idx = k
         else:
             for k in range(idx_nom, sup_nadir, -1):
                 delta = abs(dists[idx_nom] - dists[k])
-                if elev[k] > delta * tanz[j]:
+                if elev[k] > (delta / tanz[j]):
                     best_idx = k
 
         out_lat[j] = lat_sup[best_idx]
@@ -451,7 +451,6 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
     out_lats = np.full_like(swath_lats, np.nan, dtype=np.float64)
     out_lons = np.full_like(swath_lons, np.nan, dtype=np.float64)
     nscan, _ = swath_lons.shape
-
     process_func = partial(
         _process_scanline,
         dem_swath=dem_swath,
@@ -480,8 +479,8 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
 # -----------------------------------------------------------------------------
 def _orthocorrect_line_py(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup, lat_sup, out_lat, out_lon):
     npix = swath_lats_i.shape[0]
-    half = npix // 2
-    sup_nadir = half * 4
+    nadir = npix // 2
+    sup_nadir = nadir * 4
     for j in range(npix):
         if tanz[j] == 0:
             out_lat[j] = swath_lats_i[j]
@@ -489,15 +488,15 @@ def _orthocorrect_line_py(elev, dists, tanz, swath_lats_i, swath_lons_i, lon_sup
             continue
         idx_nom = j * 4
         best_idx = idx_nom
-        if j < half:
+        if idx_nom <= sup_nadir:
             for k in range(idx_nom, sup_nadir):
-                delta = abs(dists[idx_nom] - dists[k])
-                if elev[k] > delta * tanz[j]:
+                delta = abs(dists[k] - dists[idx_nom])
+                if elev[k] > (delta / tanz[j]):
                     best_idx = k
         else:
             for k in range(idx_nom, sup_nadir, -1):
                 delta = abs(dists[idx_nom] - dists[k])
-                if elev[k] > delta * tanz[j]:
+                if elev[k] > (delta / tanz[j]):
                     best_idx = k
 
         out_lat[j] = lat_sup[best_idx]
