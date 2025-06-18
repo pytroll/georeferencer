@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 import dask.array as da
+import geotiepoints as gtp
 import numpy as np
 import rioxarray
 import xarray as xr
@@ -107,9 +108,9 @@ def translate_gcp_to_swath_coordinates(gcp_array, calibrated_ds, geo_transform):
     Returns:
         (gcp coords, gcp lonlats): valid GCPs that fall within the swath image bounds, image coords and lonlats.
     """
-    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
-        lons = calibrated_ds["tc_lons"].values
-        lats = calibrated_ds["tc_lats"].values
+    if "tc_longitude" in calibrated_ds and "tc_latitude" in calibrated_ds:
+        lons = calibrated_ds["tc_longitude"].values
+        lats = calibrated_ds["tc_latitude"].values
     else:
         lons = calibrated_ds["longitude"].values
         lats = calibrated_ds["latitude"].values
@@ -204,9 +205,9 @@ def _build_swath_image(calibrated_ds, sun_zen):
 
 def _load_reference_image(reference_image_path, calibrated_ds):
     """Loads a subset of the reference image based on swath bounds."""
-    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
-        lons = calibrated_ds["tc_lons"]
-        lats = calibrated_ds["tc_lats"]
+    if "tc_longitude" in calibrated_ds and "tc_latitude" in calibrated_ds:
+        lons = calibrated_ds["tc_longitude"]
+        lats = calibrated_ds["tc_latitude"]
     else:
         lons = calibrated_ds["longitude"]
         lats = calibrated_ds["latitude"]
@@ -223,9 +224,9 @@ def _load_reference_image(reference_image_path, calibrated_ds):
 
 def _reproject_to_swath(ref_image, calibrated_ds):
     """Reprojects the reference image into the swath coordinate system."""
-    if "tc_lons" in calibrated_ds and "tc_lats" in calibrated_ds:
-        lons = calibrated_ds["tc_lons"]
-        lats = calibrated_ds["tc_lats"]
+    if "tc_longitude" in calibrated_ds and "tc_latitude" in calibrated_ds:
+        lons = calibrated_ds["tc_longitude"]
+        lats = calibrated_ds["tc_latitude"]
     else:
         lons = calibrated_ds["longitude"]
         lats = calibrated_ds["latitude"]
@@ -297,6 +298,7 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     Raises:
         ValueError: If no valid displacement is found.
     """
+    dem_path = "/home/k000886/Downloads/copernicus_resampled_250m/final_250m_merged.tif"
     if dem_path:
         calibrated_ds = orthocorrection(calibrated_ds, sat_zen, dem_path)
     swath = _build_swath_image(calibrated_ds, sun_zen)
@@ -439,11 +441,9 @@ def _get_dem_swath(dem_file_path, min_lats, max_lats, min_lon, max_lon, lons_sup
 
 def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
     """Performs orthocorrection on latitude and longitude based on satellite viewing angles."""
-    from pygac.pygac_geotiepoints import lat_lon_interpolator
-
     swath_lons = calibrated_ds["longitude"]
     swath_lats = calibrated_ds["latitude"]
-    lons, lats = lat_lon_interpolator(swath_lons, swath_lats, np.arange(2048), np.arange(0, 2048, 0.25))
+    lons, lats = lonlat_interpolator(swath_lons, swath_lats, np.arange(2048), np.arange(0, 2048, 0.25))
 
     dem_swath = _get_dem_swath(
         dem_file_path, np.min(swath_lats), np.max(swath_lats), np.min(swath_lons), np.max(swath_lons), lons, lats
@@ -469,9 +469,20 @@ def orthocorrection(calibrated_ds, sat_zen, dem_file_path):
             out_lats[i] = lat_line
             out_lons[i] = lon_line
 
-    calibrated_ds["tc_lats"] = (calibrated_ds["latitude"].dims, out_lats)
-    calibrated_ds["tc_lons"] = (calibrated_ds["longitude"].dims, out_lons)
+    calibrated_ds["tc_latitude"] = (calibrated_ds["latitude"].dims, out_lats)
+    calibrated_ds["tc_longitude"] = (calibrated_ds["longitude"].dims, out_lons)
     return calibrated_ds
+
+
+def lonlat_interpolator(lons, lats, cols_subset, cols_full):
+    """Interpolate from lat-lon tie-points to pixel locations."""
+    rows = np.arange(len(lats))
+    along_track_order = 1
+    cross_track_order = 3
+    satint = gtp.SatelliteInterpolator(
+        (lons, lats), (rows, cols_subset), (rows, cols_full), along_track_order, cross_track_order
+    )
+    return satint.interpolate()
 
 
 # -----------------------------------------------------------------------------
