@@ -1,3 +1,15 @@
+## Version 0.3.0 (2025/06/18)
+
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 16](https://github.com/pytroll/georeferencer/pull/16) - Orthocorrection
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.2.0 (2025/05/26)
 
 ### Issues Closed
