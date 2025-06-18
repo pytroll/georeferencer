@@ -25,7 +25,7 @@ def test_flat_dem_identity():
     assert np.allclose(out_lon, swath_lons)
 
 
-def test_slope_dem_forward():
+def test_dem_forward():
     """Test with constant elevation for testing forward search."""
     n = 6
     factor = 4
