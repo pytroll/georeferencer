@@ -23,6 +23,8 @@ dependencies = [
     "rioxarray>=0.18.2",
     "scipy>=1.15.2",
     "pyorbital>1.10.0",
+    "numba>=0.61.2",
+    "python-geotiepoints>=1.7.5",
 ]
 
 [project.optional-dependencies]
