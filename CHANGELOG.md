@@ -1,3 +1,15 @@
+## Version 0.3.2 (2025/06/18)
+
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 18](https://github.com/pytroll/georeferencer/pull/18) - Changed how the format that the gcp data is saved to the dataset and …
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.3.1 (2025/06/18)
 
 
