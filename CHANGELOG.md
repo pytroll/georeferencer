@@ -1,3 +1,15 @@
+## Version 0.3.1 (2025/06/18)
+
+
+### Pull Requests Merged
+
+#### Bugs fixed
+
+* [PR 17](https://github.com/pytroll/georeferencer/pull/17) - Removed hard coded path for DEM which was used for testing purposes a…
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.3.0 (2025/06/18)
 
 
