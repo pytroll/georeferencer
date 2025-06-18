@@ -275,7 +275,7 @@ def _calculate_valid_gcps_from_swath_alignment(swath_coords, gcp_lonlats, swath,
     valid_gcps = np.column_stack(
         [valid_swath_coords[:, 0] - valid_displacements[:, 0], valid_swath_coords[:, 1] - valid_displacements[:, 1]]
     )
-    return valid_gcps, valid_gcp_lonlats
+    return valid_gcps, valid_gcp_lonlats, valid_swath_coords
 
 
 def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path, dem_path=None):
@@ -307,16 +307,38 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     target_area = _reproject_to_swath(ref_image, calibrated_ds)
     gcp_points = _generate_gcps(ref_image)
     swath_coords, gcp_lonlats = translate_gcp_to_swath_coordinates(gcp_points, calibrated_ds, geo_transform)
-    gcps, valid_gcp_lonlats = _calculate_valid_gcps_from_swath_alignment(
+    gcps, valid_gcp_lonlats, valid_swath_coords = _calculate_valid_gcps_from_swath_alignment(
         swath_coords, gcp_lonlats, swath, np.nan_to_num(target_area.values, nan=0.0)
     )
-    gcp_data = xr.Dataset(
-        {
-            "gcp_lonlats": (("gcp", "lonlat"), np.array(valid_gcp_lonlats)),
-            "gcps": (("gcp", "xy"), np.array(gcps)),
-        }
+
+    valid_swath_coords = np.array(valid_swath_coords)
+    gcp_lonlats = np.array(gcp_lonlats)
+    gcps = np.array(gcps)
+    y, x = valid_swath_coords[:, 0], valid_swath_coords[:, 1]
+    lon, lat = gcp_lonlats[:, 0], gcp_lonlats[:, 1]
+    y_corrected, x_corrected = gcps[:, 0], gcps[:, 1]
+    y_displacement = valid_swath_coords[:, 0] - gcps[:, 0]
+    x_displacement = valid_swath_coords[:, 1] - gcps[:, 1]
+    gcp_dtype = np.dtype(
+        [
+            ("x", ">u2"),
+            ("y", ">u2"),
+            ("longitude", "float"),
+            ("latitude", "float"),
+            ("x_corrected", ">f4"),
+            ("y_corrected", ">f4"),
+            ("x_displacement", ">f4"),
+            ("y_displacement", ">f4"),
+        ]
     )
-    calibrated_ds = xr.merge([calibrated_ds, gcp_data])
+
+    gcp_data = np.array(
+        list(zip(x, y, lon, lat, x_corrected, y_corrected, x_displacement, y_displacement, strict=False)),
+        dtype=gcp_dtype,
+    ).view(np.recarray)
+    gcps_da = xr.DataArray(gcp_data, dims=["points"])
+    calibrated_ds["gcps"] = gcps_da
+
     _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps)
     logger.debug(f"Found {len(gcps)} valid gcps")
     return estimate_time_and_attitude_deviations(
