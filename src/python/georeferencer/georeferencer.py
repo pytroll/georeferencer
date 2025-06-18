@@ -293,7 +293,8 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
         dem_path (str, optional): Path to the DEM GeoTIFF image.
 
     Returns:
-        tuple: Displacement values (time difference, roll, pitch, yaw) between the swath and reference image.
+        tuple: Time, attitude and distances between the swath and reference image as
+            `(time difference, (roll, pitch, yaw), (distances_original, distances_minimized))`
 
     Raises:
         ValueError: If no valid displacement is found.
