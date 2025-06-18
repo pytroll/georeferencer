@@ -299,7 +299,6 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     Raises:
         ValueError: If no valid displacement is found.
     """
-    dem_path = "/home/k000886/Downloads/copernicus_resampled_250m/final_250m_merged.tif"
     if dem_path:
         calibrated_ds = orthocorrection(calibrated_ds, sat_zen, dem_path)
     swath = _build_swath_image(calibrated_ds, sun_zen)
