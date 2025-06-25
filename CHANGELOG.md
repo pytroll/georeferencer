@@ -1,3 +1,15 @@
+## Version 0.3.3 (2025/06/25)
+
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 19](https://github.com/pytroll/georeferencer/pull/19) - Changed gcp data to a format that netcdf approves of
+
+In this release 1 pull request was closed.
+
+
 ## Version 0.3.2 (2025/06/18)
 
 
