@@ -312,32 +312,22 @@ def get_swath_displacement(calibrated_ds, sun_zen, sat_zen, reference_image_path
     )
 
     valid_swath_coords = np.array(valid_swath_coords)
-    gcp_lonlats = np.array(gcp_lonlats)
+    valid_gcp_lonlats = np.array(valid_gcp_lonlats)
     gcps = np.array(gcps)
     y, x = valid_swath_coords[:, 0], valid_swath_coords[:, 1]
-    lon, lat = gcp_lonlats[:, 0], gcp_lonlats[:, 1]
+    lon, lat = valid_gcp_lonlats[:, 0], valid_gcp_lonlats[:, 1]
     y_corrected, x_corrected = gcps[:, 0], gcps[:, 1]
     y_displacement = valid_swath_coords[:, 0] - gcps[:, 0]
     x_displacement = valid_swath_coords[:, 1] - gcps[:, 1]
-    gcp_dtype = np.dtype(
-        [
-            ("x", ">u2"),
-            ("y", ">u2"),
-            ("longitude", "float"),
-            ("latitude", "float"),
-            ("x_corrected", ">f4"),
-            ("y_corrected", ">f4"),
-            ("x_displacement", ">f4"),
-            ("y_displacement", ">f4"),
-        ]
-    )
 
-    gcp_data = np.array(
-        list(zip(x, y, lon, lat, x_corrected, y_corrected, x_displacement, y_displacement, strict=False)),
-        dtype=gcp_dtype,
-    ).view(np.recarray)
-    gcps_da = xr.DataArray(gcp_data, dims=["points"])
-    calibrated_ds["gcps"] = gcps_da
+    calibrated_ds["gcp_x"] = xr.DataArray(x, dims=["points"])
+    calibrated_ds["gcp_y"] = xr.DataArray(y, dims=["points"])
+    calibrated_ds["gcp_longitude"] = xr.DataArray(lon, dims=["points"])
+    calibrated_ds["gcp_latitude"] = xr.DataArray(lat, dims=["points"])
+    calibrated_ds["gcp_x_corrected"] = xr.DataArray(x_corrected, dims=["points"])
+    calibrated_ds["gcp_y_corrected"] = xr.DataArray(y_corrected, dims=["points"])
+    calibrated_ds["gcp_x_displacement"] = xr.DataArray(x_displacement, dims=["points"])
+    calibrated_ds["gcp_y_displacement"] = xr.DataArray(y_displacement, dims=["points"])
 
     _translate_gcp_lines_to_scanline_offsets(calibrated_ds, gcps)
     logger.debug(f"Found {len(gcps)} valid gcps")
