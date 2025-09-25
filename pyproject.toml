@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "georeferencer"
 dynamic = ["version"]
 description = "Python package for georeferencing satellite imagery."
+license = "LGPL-3.0-or-later"
+license-files = ["LICENSE"]
 readme = "README.md"
 authors = [
     { name = "Jacob Nilsson", email = "jacobnilsson95@hotmail.com" },
