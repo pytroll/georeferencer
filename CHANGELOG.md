@@ -1,3 +1,21 @@
+## Version 0.3.4 (2025/10/08)
+
+### Issues Closed
+
+* [Issue 15](https://github.com/pytroll/georeferencer/issues/15) - Add orthocorrection procedure
+
+In this release 1 issue was closed.
+
+### Pull Requests Merged
+
+#### Features added
+
+* [PR 21](https://github.com/pytroll/georeferencer/pull/21) - Relicense to Apache-2
+* [PR 20](https://github.com/pytroll/georeferencer/pull/20) - Relicense to LGPL-3
+
+In this release 2 pull requests were closed.
+
+
 ## Version 0.3.3 (2025/06/25)
 
 
